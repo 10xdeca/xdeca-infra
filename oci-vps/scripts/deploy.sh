@@ -1,12 +1,16 @@
 #!/bin/bash
 # Deploy services to xdeca VPS
 # Usage: ./scripts/deploy.sh [service]
-# Services: all, caddy, openproject, twenty, discourse
+# Services: all, caddy, openproject, twenty, discourse, scripts
 
 set -e
 
+# Get repo root (one level up from oci-vps)
+REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+OCI_VPS_DIR="$REPO_ROOT/oci-vps"
+
 SERVICE=${1:-all}
-REMOTE="ubuntu@$(terraform -chdir=terraform output -raw instance_public_ip)"
+REMOTE="ubuntu@$(terraform -chdir="$OCI_VPS_DIR/terraform" output -raw instance_public_ip)"
 
 echo "Deploying to $REMOTE..."
 
@@ -14,20 +18,31 @@ echo "Deploying to $REMOTE..."
 decrypt_secrets() {
     echo "Decrypting secrets..."
 
-    if [ -f secrets/openproject.yaml ]; then
-        sops -d secrets/openproject.yaml | yq -r '"OPENPROJECT_HOSTNAME=\(.hostname)\nOPENPROJECT_SECRET_KEY_BASE=\(.secret_key_base)"' > compose/openproject/.env
+    if [ -f "$REPO_ROOT/openproject/secrets.yaml" ]; then
+        sops -d "$REPO_ROOT/openproject/secrets.yaml" | yq -r '"OPENPROJECT_HOSTNAME=\(.hostname)\nOPENPROJECT_SECRET_KEY_BASE=\(.secret_key_base)"' > "$REPO_ROOT/openproject/.env"
     fi
 
-    if [ -f secrets/twenty.yaml ]; then
-        sops -d secrets/twenty.yaml | yq -r '"TWENTY_HOSTNAME=\(.hostname)\nPOSTGRES_PASSWORD=\(.postgres_password)\nACCESS_TOKEN_SECRET=\(.access_token_secret)\nLOGIN_TOKEN_SECRET=\(.login_token_secret)\nREFRESH_TOKEN_SECRET=\(.refresh_token_secret)\nFILE_TOKEN_SECRET=\(.file_token_secret)"' > compose/twenty/.env
+    if [ -f "$REPO_ROOT/twenty/secrets.yaml" ]; then
+        sops -d "$REPO_ROOT/twenty/secrets.yaml" | yq -r '"TWENTY_HOSTNAME=\(.hostname)\nPOSTGRES_PASSWORD=\(.postgres_password)\nACCESS_TOKEN_SECRET=\(.access_token_secret)\nLOGIN_TOKEN_SECRET=\(.login_token_secret)\nREFRESH_TOKEN_SECRET=\(.refresh_token_secret)\nFILE_TOKEN_SECRET=\(.file_token_secret)"' > "$REPO_ROOT/twenty/.env"
     fi
+}
+
+deploy_scripts() {
+    echo "Deploying backup scripts..."
+
+    # Copy scripts to /opt/scripts
+    rsync -avz "$REPO_ROOT/scripts/" $REMOTE:/opt/scripts/
+    ssh $REMOTE "chmod +x /opt/scripts/*.sh"
+
+    echo "Backup scripts deployed to /opt/scripts/"
+    echo "Run '/opt/scripts/setup-backups.sh' to configure rclone credentials"
 }
 
 deploy_service() {
     local svc=$1
     echo "Deploying $svc..."
 
-    rsync -avz --delete compose/$svc/ $REMOTE:~/apps/$svc/
+    rsync -avz --delete "$REPO_ROOT/$svc/" $REMOTE:~/apps/$svc/
     ssh $REMOTE "cd ~/apps/$svc && podman-compose pull && podman-compose up -d"
 }
 
@@ -39,19 +54,19 @@ deploy_discourse() {
     ssh $REMOTE "test -d ~/apps/discourse || git clone https://github.com/discourse/discourse_docker.git ~/apps/discourse"
 
     # Copy app.yml config
-    if [ -f secrets/discourse.yaml ]; then
+    if [ -f "$REPO_ROOT/discourse/secrets.yaml" ]; then
         # Generate app.yml from template and secrets
         echo "Generating Discourse config from secrets..."
-        HOSTNAME=$(sops -d secrets/discourse.yaml | yq -r '.hostname')
-        DEV_EMAIL=$(sops -d secrets/discourse.yaml | yq -r '.developer_email')
-        SMTP_ADDR=$(sops -d secrets/discourse.yaml | yq -r '.smtp_address')
-        SMTP_PORT=$(sops -d secrets/discourse.yaml | yq -r '.smtp_port')
-        SMTP_USER=$(sops -d secrets/discourse.yaml | yq -r '.smtp_user')
-        SMTP_PASS=$(sops -d secrets/discourse.yaml | yq -r '.smtp_password')
-        SMTP_DOMAIN=$(sops -d secrets/discourse.yaml | yq -r '.smtp_domain')
-        NOTIF_EMAIL=$(sops -d secrets/discourse.yaml | yq -r '.notification_email')
+        HOSTNAME=$(sops -d "$REPO_ROOT/discourse/secrets.yaml" | yq -r '.hostname')
+        DEV_EMAIL=$(sops -d "$REPO_ROOT/discourse/secrets.yaml" | yq -r '.developer_email')
+        SMTP_ADDR=$(sops -d "$REPO_ROOT/discourse/secrets.yaml" | yq -r '.smtp_address')
+        SMTP_PORT=$(sops -d "$REPO_ROOT/discourse/secrets.yaml" | yq -r '.smtp_port')
+        SMTP_USER=$(sops -d "$REPO_ROOT/discourse/secrets.yaml" | yq -r '.smtp_user')
+        SMTP_PASS=$(sops -d "$REPO_ROOT/discourse/secrets.yaml" | yq -r '.smtp_password')
+        SMTP_DOMAIN=$(sops -d "$REPO_ROOT/discourse/secrets.yaml" | yq -r '.smtp_domain')
+        NOTIF_EMAIL=$(sops -d "$REPO_ROOT/discourse/secrets.yaml" | yq -r '.notification_email')
 
-        cat compose/discourse/app.yml.example | \
+        cat "$REPO_ROOT/discourse/app.yml.example" | \
             sed "s/discourse.example.com/$HOSTNAME/g" | \
             sed "s/admin@example.com/$DEV_EMAIL/g" | \
             sed "s/smtp.mailgun.org/$SMTP_ADDR/g" | \
@@ -77,10 +92,14 @@ decrypt_secrets
 
 case $SERVICE in
     all)
+        deploy_scripts
         deploy_service caddy
         deploy_service openproject
         deploy_service twenty
         deploy_discourse
+        ;;
+    scripts)
+        deploy_scripts
         ;;
     caddy|openproject|twenty)
         deploy_service $SERVICE
@@ -90,7 +109,7 @@ case $SERVICE in
         ;;
     *)
         echo "Unknown service: $SERVICE"
-        echo "Usage: $0 [all|caddy|openproject|twenty|discourse]"
+        echo "Usage: $0 [all|caddy|openproject|twenty|discourse|scripts]"
         exit 1
         ;;
 esac
