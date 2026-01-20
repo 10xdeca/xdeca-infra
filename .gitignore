@@ -1,0 +1,19 @@
+# OS
+.DS_Store
+*.swp
+
+# Editor
+.idea/
+.vscode/
+
+# Unencrypted env files (never commit)
+.env
+*.env
+**/.env
+
+# Terraform
+**/.terraform/
+**/.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfplan

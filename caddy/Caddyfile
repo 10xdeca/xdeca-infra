@@ -1,0 +1,11 @@
+openproject.yourdomain.com {
+    reverse_proxy localhost:8080
+}
+
+twenty.yourdomain.com {
+    reverse_proxy localhost:3000
+}
+
+discourse.yourdomain.com {
+    reverse_proxy localhost:8888
+}

@@ -1,0 +1,5 @@
+# Example secrets file (this file is NOT encrypted)
+# Copy to openproject.yaml and encrypt with: sops -e -i openproject.yaml
+
+hostname: openproject.example.com
+secret_key_base: your-64-char-hex-secret-here
