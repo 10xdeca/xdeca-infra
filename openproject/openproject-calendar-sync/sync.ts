@@ -1,0 +1,180 @@
+import { google } from "googleapis";
+
+// Configuration from environment
+const OPENPROJECT_URL = process.env.OPENPROJECT_URL!;
+const OPENPROJECT_API_KEY = process.env.OPENPROJECT_API_KEY!;
+const GOOGLE_CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID!;
+const GOOGLE_SERVICE_ACCOUNT_JSON = process.env.GOOGLE_SERVICE_ACCOUNT_JSON!;
+
+interface WorkPackage {
+  id: number;
+  subject: string;
+  description?: { raw: string };
+  startDate?: string;
+  dueDate?: string;
+  _links: {
+    type: { title: string };
+    project: { title: string };
+    self: { href: string };
+  };
+}
+
+interface OpenProjectResponse {
+  _embedded: {
+    elements: WorkPackage[];
+  };
+  total: number;
+}
+
+async function fetchWorkPackages(): Promise<WorkPackage[]> {
+  const filters = JSON.stringify([
+    { status: { operator: "o", values: [] } }, // Open statuses only
+  ]);
+
+  const url = `${OPENPROJECT_URL}/api/v3/work_packages?filters=${encodeURIComponent(filters)}&pageSize=200`;
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Basic ${Buffer.from(`apikey:${OPENPROJECT_API_KEY}`).toString("base64")}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`OpenProject API error: ${response.status} ${await response.text()}`);
+  }
+
+  const data: OpenProjectResponse = await response.json();
+  return data._embedded.elements;
+}
+
+async function getCalendarClient() {
+  const credentials = JSON.parse(GOOGLE_SERVICE_ACCOUNT_JSON);
+
+  const auth = new google.auth.GoogleAuth({
+    credentials,
+    scopes: ["https://www.googleapis.com/auth/calendar"],
+  });
+
+  return google.calendar({ version: "v3", auth });
+}
+
+function generateEventId(workPackageId: number): string {
+  // Google Calendar event IDs must be lowercase alphanumeric
+  return `openproject${workPackageId}`;
+}
+
+async function syncToCalendar(workPackages: WorkPackage[]) {
+  const calendar = await getCalendarClient();
+
+  // Filter to work packages with dates
+  const withDates = workPackages.filter((wp) => wp.startDate || wp.dueDate);
+
+  console.log(`Found ${workPackages.length} open work packages, ${withDates.length} with dates`);
+
+  for (const wp of withDates) {
+    const eventId = generateEventId(wp.id);
+    const isMilestone = wp._links.type.title.toLowerCase() === "milestone";
+
+    // For milestones or items with only due date, use due date as single-day event
+    // For items with both dates, create a multi-day event
+    const startDate = wp.startDate || wp.dueDate!;
+    const endDate = wp.dueDate || wp.startDate!;
+
+    // Add one day to end date because Google Calendar end dates are exclusive
+    const endDatePlusOne = new Date(endDate);
+    endDatePlusOne.setDate(endDatePlusOne.getDate() + 1);
+
+    const event = {
+      summary: `${isMilestone ? "🎯 " : ""}[${wp._links.project.title}] ${wp.subject}`,
+      description: [
+        wp.description?.raw || "",
+        "",
+        `Type: ${wp._links.type.title}`,
+        `OpenProject: ${OPENPROJECT_URL}/work_packages/${wp.id}`,
+      ].join("\n"),
+      start: { date: startDate },
+      end: { date: endDatePlusOne.toISOString().split("T")[0] },
+      transparency: "transparent", // Don't block time
+    };
+
+    try {
+      // Try to update existing event
+      await calendar.events.update({
+        calendarId: GOOGLE_CALENDAR_ID,
+        eventId,
+        requestBody: event,
+      });
+      console.log(`Updated: ${wp.subject}`);
+    } catch (error: unknown) {
+      if (error && typeof error === "object" && "code" in error && error.code === 404) {
+        // Event doesn't exist, create it
+        await calendar.events.insert({
+          calendarId: GOOGLE_CALENDAR_ID,
+          requestBody: { ...event, id: eventId },
+        });
+        console.log(`Created: ${wp.subject}`);
+      } else {
+        console.error(`Failed to sync "${wp.subject}":`, error);
+      }
+    }
+  }
+}
+
+async function cleanupClosedWorkPackages() {
+  const calendar = await getCalendarClient();
+
+  // Fetch all OpenProject events from calendar
+  const events = await calendar.events.list({
+    calendarId: GOOGLE_CALENDAR_ID,
+    q: "OpenProject:", // Our events have this in description
+    maxResults: 500,
+  });
+
+  // Get current open work package IDs
+  const openWPs = await fetchWorkPackages();
+  const openIds = new Set(openWPs.map((wp) => generateEventId(wp.id)));
+
+  // Delete events for closed work packages
+  for (const event of events.data.items || []) {
+    if (event.id?.startsWith("openproject") && !openIds.has(event.id)) {
+      try {
+        await calendar.events.delete({
+          calendarId: GOOGLE_CALENDAR_ID,
+          eventId: event.id,
+        });
+        console.log(`Deleted closed: ${event.summary}`);
+      } catch (error) {
+        console.error(`Failed to delete "${event.summary}":`, error);
+      }
+    }
+  }
+}
+
+async function main() {
+  console.log("Starting OpenProject → Google Calendar sync...");
+
+  // Validate environment
+  const required = [
+    "OPENPROJECT_URL",
+    "OPENPROJECT_API_KEY",
+    "GOOGLE_CALENDAR_ID",
+    "GOOGLE_SERVICE_ACCOUNT_JSON",
+  ];
+  for (const key of required) {
+    if (!process.env[key]) {
+      throw new Error(`Missing required environment variable: ${key}`);
+    }
+  }
+
+  const workPackages = await fetchWorkPackages();
+  await syncToCalendar(workPackages);
+  await cleanupClosedWorkPackages();
+
+  console.log("Sync complete!");
+}
+
+main().catch((error) => {
+  console.error("Sync failed:", error);
+  process.exit(1);
+});
