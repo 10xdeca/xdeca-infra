@@ -105,6 +105,20 @@ Used for auto-retry provisioning when OCI is out of capacity.
 ssh pi   # Via Tailscale
 ```
 
+## Auto-Retry Provisioning
+
+The Pi runs a cron job every 5 minutes to retry provisioning until successful:
+
+```bash
+# Check status
+ssh pi "tail ~/oci-provision.log"
+
+# Script location
+~/xdeca-infra/oci-vps/retry-provision.sh
+
+# Cron auto-disables on success
+```
+
 ## Keep-Alive
 
 Cloud-init installs a cron job that runs every 6 hours to prevent Oracle from reclaiming idle instances.
@@ -177,7 +191,7 @@ Update `Caddyfile` with your domains before deploying.
 Project management. Uses internal PostgreSQL.
 
 - **Default login**: admin / admin
-- **Secrets needed**: `SECRET_KEY_BASE`
+- **Secrets**: `SECRET_KEY_BASE`, SMTP credentials (Brevo)
 
 ---
 
