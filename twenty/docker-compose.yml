@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:16-alpine
+    image: docker.io/library/postgres:16-alpine
     restart: always
     environment:
       POSTGRES_USER: twenty
@@ -15,7 +15,7 @@ services:
       retries: 10
 
   redis:
-    image: redis:alpine
+    image: docker.io/library/redis:alpine
     restart: always
     command: ["--maxmemory-policy", "noeviction"]
     volumes:
@@ -27,7 +27,7 @@ services:
       retries: 10
 
   server:
-    image: twentycrm/twenty:${TAG:-latest}
+    image: docker.io/twentycrm/twenty:${TAG:-latest}
     restart: always
     ports:
       - "3000:3000"
@@ -56,7 +56,7 @@ services:
       retries: 20
 
   worker:
-    image: twentycrm/twenty:${TAG:-latest}
+    image: docker.io/twentycrm/twenty:${TAG:-latest}
     restart: always
     command: ["yarn", "worker:prod"]
     environment:

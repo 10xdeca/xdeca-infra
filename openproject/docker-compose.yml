@@ -1,6 +1,6 @@
 services:
   openproject:
-    image: openproject/openproject:15
+    image: docker.io/openproject/openproject:15
     restart: always
     ports:
       - "8080:80"

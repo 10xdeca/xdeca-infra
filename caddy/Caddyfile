@@ -1,11 +1,11 @@
-openproject.yourdomain.com {
+openproject.enspyr.co {
     reverse_proxy localhost:8080
 }
 
-twenty.yourdomain.com {
+twenty.enspyr.co {
     reverse_proxy localhost:3000
 }
 
-discourse.yourdomain.com {
+discourse.enspyr.co {
     reverse_proxy localhost:8888
 }
