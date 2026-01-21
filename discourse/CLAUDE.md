@@ -5,7 +5,7 @@ Run Discourse on Oracle Cloud VPS (xdeca). Currently testing on Kamatera before 
 
 ## Current Status
 
-**Kamatera (temporary/testing):** Running at `79.108.224.225`
+**Kamatera (temporary/testing):** Running at `103.125.218.210`
 
 ## Migration Plan
 1. Create test content on Kamatera instance
@@ -30,10 +30,10 @@ Chosen for transactional emails. Setup steps:
 ## Server Access
 
 ```bash
-ssh xdeca   # root@79.108.224.225
+ssh xdeca   # ubuntu@103.125.218.210
 ```
 
-Discourse running on port **8888** (http://79.108.224.225:8888)
+Discourse running on port **8888** (http://103.125.218.210:8888)
 
 ## Deployment Notes
 
@@ -55,7 +55,7 @@ Enter during setup:
 - SMTP settings from Brevo
 
 ### DNS Setup
-Point A record for forum subdomain to `79.108.224.225`.
+Point A record for forum subdomain to `103.125.218.210`.
 
 ### Complete Setup
 Register admin account via activation email.
