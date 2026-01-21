@@ -145,6 +145,17 @@ make apply
 
 The Pi has terraform, sops, and age installed, plus the age key for decrypting secrets.
 
+## Terraform State
+
+State is encrypted with age and committed to git (`terraform.tfstate.age`).
+
+```bash
+make state-pull    # Decrypt state (auto-runs on init/plan/apply)
+make state-push    # Encrypt state (auto-runs after apply/destroy)
+```
+
+From a new machine: ensure age key exists at `~/.config/sops/age/keys.txt`, then run `make state-pull`.
+
 ---
 
 # caddy

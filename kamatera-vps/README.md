@@ -49,6 +49,22 @@ make deploy           # Deploy all services
 make logs-openproject # View logs
 ```
 
+## Terraform State
+
+State is encrypted with age and committed to git for sharing across machines.
+
+```bash
+make state-pull       # Decrypt state from git (auto-runs on init/plan/apply)
+make state-push       # Encrypt state to git (auto-runs after apply/destroy)
+```
+
+**Requirements:** Age key at `~/.config/sops/age/keys.txt`
+
+**From a new machine:**
+1. Ensure you have the age key
+2. Run `make state-pull` to decrypt state
+3. Run terraform commands as normal
+
 ## Switching from OCI
 
 If OCI instance is reclaimed and you need Kamatera:
