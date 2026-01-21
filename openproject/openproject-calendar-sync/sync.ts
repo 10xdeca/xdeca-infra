@@ -67,17 +67,17 @@ function generateEventId(workPackageId: number): string {
 async function syncToCalendar(workPackages: WorkPackage[]) {
   const calendar = await getCalendarClient();
 
-  // Filter to work packages with dates
-  const withDates = workPackages.filter((wp) => wp.startDate || wp.dueDate);
+  // Filter to milestones only
+  const milestones = workPackages.filter(
+    (wp) => wp._links.type.title.toLowerCase() === "milestone" && (wp.startDate || wp.dueDate)
+  );
 
-  console.log(`Found ${workPackages.length} open work packages, ${withDates.length} with dates`);
+  console.log(`Found ${workPackages.length} open work packages, ${milestones.length} milestones with dates`);
 
-  for (const wp of withDates) {
+  for (const wp of milestones) {
     const eventId = generateEventId(wp.id);
-    const isMilestone = wp._links.type.title.toLowerCase() === "milestone";
 
-    // For milestones or items with only due date, use due date as single-day event
-    // For items with both dates, create a multi-day event
+    // Use the date (milestones typically just have a due date)
     const startDate = wp.startDate || wp.dueDate!;
     const endDate = wp.dueDate || wp.startDate!;
 
@@ -86,7 +86,7 @@ async function syncToCalendar(workPackages: WorkPackage[]) {
     endDatePlusOne.setDate(endDatePlusOne.getDate() + 1);
 
     const event = {
-      summary: `${isMilestone ? "🎯 " : ""}[${wp._links.project.title}] ${wp.subject}`,
+      summary: `🎯 [${wp._links.project.title}] ${wp.subject}`,
       description: [
         wp.description?.raw || "",
         "",
@@ -131,13 +131,17 @@ async function cleanupClosedWorkPackages() {
     maxResults: 500,
   });
 
-  // Get current open work package IDs
+  // Get current open milestone IDs only
   const openWPs = await fetchWorkPackages();
-  const openIds = new Set(openWPs.map((wp) => generateEventId(wp.id)));
+  const openMilestoneIds = new Set(
+    openWPs
+      .filter((wp) => wp._links.type.title.toLowerCase() === "milestone")
+      .map((wp) => generateEventId(wp.id))
+  );
 
-  // Delete events for closed work packages
+  // Delete events for closed/non-milestone work packages
   for (const event of events.data.items || []) {
-    if (event.id?.startsWith("openproject") && !openIds.has(event.id)) {
+    if (event.id?.startsWith("openproject") && !openMilestoneIds.has(event.id)) {
       try {
         await calendar.events.delete({
           calendarId: GOOGLE_CALENDAR_ID,
