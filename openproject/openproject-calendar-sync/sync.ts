@@ -12,6 +12,7 @@ interface WorkPackage {
   description?: { raw: string };
   startDate?: string;
   dueDate?: string;
+  date?: string; // Milestones use this field instead of startDate/dueDate
   _links: {
     type: { title: string };
     project: { title: string };
@@ -67,9 +68,9 @@ function generateEventId(workPackageId: number): string {
 async function syncToCalendar(workPackages: WorkPackage[]) {
   const calendar = await getCalendarClient();
 
-  // Filter to milestones only
+  // Filter to milestones only (milestones use `date` field, not startDate/dueDate)
   const milestones = workPackages.filter(
-    (wp) => wp._links.type.title.toLowerCase() === "milestone" && (wp.startDate || wp.dueDate)
+    (wp) => wp._links.type.title.toLowerCase() === "milestone" && (wp.date || wp.startDate || wp.dueDate)
   );
 
   console.log(`Found ${workPackages.length} open work packages, ${milestones.length} milestones with dates`);
@@ -77,9 +78,9 @@ async function syncToCalendar(workPackages: WorkPackage[]) {
   for (const wp of milestones) {
     const eventId = generateEventId(wp.id);
 
-    // Use the date (milestones typically just have a due date)
-    const startDate = wp.startDate || wp.dueDate!;
-    const endDate = wp.dueDate || wp.startDate!;
+    // Use the date (milestones use `date` field, regular work packages use startDate/dueDate)
+    const startDate = wp.date || wp.startDate || wp.dueDate!;
+    const endDate = wp.date || wp.dueDate || wp.startDate!;
 
     // Add one day to end date because Google Calendar end dates are exclusive
     const endDatePlusOne = new Date(endDate);
