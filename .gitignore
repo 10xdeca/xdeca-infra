@@ -11,9 +11,7 @@
 *.env
 **/.env
 
-# Terraform
-**/.terraform/
-**/.terraform.lock.hcl
-*.tfstate
-*.tfstate.*
-*.tfplan
+# Terraform - only ignore large/unencrypted files
+**/.terraform/          # Provider cache (large, reproducible)
+**/terraform.tfstate    # Unencrypted state (use .age version)
+**/terraform.tfstate.backup
