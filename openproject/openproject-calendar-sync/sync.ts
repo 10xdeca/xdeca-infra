@@ -7,11 +7,7 @@ const OPENPROJECT_API_KEY = process.env.OPENPROJECT_API_KEY!;
 const GOOGLE_CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID!;
 const GOOGLE_SERVICE_ACCOUNT_JSON = process.env.GOOGLE_SERVICE_ACCOUNT_JSON!;
 
-// Default time for milestones (12:00 PM Melbourne)
-const DEFAULT_TIME = "12:00:00";
-const DEFAULT_TIMEZONE = "Australia/Melbourne";
-
-// Generate a hash of event content for change detection (date only, not time)
+// Generate a hash of event content for change detection
 function generateEventHash(date: string, summary: string): string {
   return createHash("md5").update(`${date}:${summary}`).digest("hex").slice(0, 16);
 }
@@ -94,30 +90,27 @@ async function syncToCalendar(workPackages: WorkPackage[]) {
     const eventSummary = `🎯 [${wp._links.project.title}] ${wp.subject}`;
     const contentHash = generateEventHash(milestoneDate, eventSummary);
 
-    // Try to get existing event to preserve user-set time
-    let existingTime: string | null = null;
-    let existingEndTime: string | null = null;
+    // Check if event exists and if the date has changed from Calendar side
+    let skipUpdate = false;
     try {
       const existing = await calendar.events.get({
         calendarId: GOOGLE_CALENDAR_ID,
         eventId,
       });
-      // Extract time from existing dateTime if present
-      if (existing.data.start?.dateTime) {
-        const match = existing.data.start.dateTime.match(/T(\d{2}:\d{2}:\d{2})/);
-        if (match) existingTime = match[1];
-      }
-      if (existing.data.end?.dateTime) {
-        const match = existing.data.end.dateTime.match(/T(\d{2}:\d{2}:\d{2})/);
-        if (match) existingEndTime = match[1];
+      const existingDate = existing.data.start?.date || existing.data.start?.dateTime?.split("T")[0];
+      const existingHash = existing.data.extendedProperties?.private?.contentHash;
+
+      // If Calendar date differs from OpenProject AND hash doesn't match stored hash,
+      // it means Calendar was modified by user - skip this update
+      if (existingDate && existingDate !== milestoneDate && existingHash !== contentHash) {
+        console.log(`Skipping ${wp.subject}: Calendar has different date (${existingDate}), pending reverse sync`);
+        skipUpdate = true;
       }
     } catch {
-      // Event doesn't exist yet, will use defaults
+      // Event doesn't exist yet
     }
 
-    // Use existing time or default to 12:00 PM
-    const startTime = existingTime || DEFAULT_TIME;
-    const endTime = existingEndTime || "13:00:00"; // 1 hour duration by default
+    if (skipUpdate) continue;
 
     const event = {
       summary: eventSummary,
@@ -127,14 +120,8 @@ async function syncToCalendar(workPackages: WorkPackage[]) {
         `Type: ${wp._links.type.title}`,
         `OpenProject: ${OPENPROJECT_URL}/work_packages/${wp.id}`,
       ].join("\n"),
-      start: {
-        dateTime: `${milestoneDate}T${startTime}`,
-        timeZone: DEFAULT_TIMEZONE,
-      },
-      end: {
-        dateTime: `${milestoneDate}T${endTime}`,
-        timeZone: DEFAULT_TIMEZONE,
-      },
+      start: { date: milestoneDate },
+      end: { date: milestoneDate },
       transparency: "transparent", // Don't block time
       extendedProperties: {
         private: {
@@ -152,7 +139,7 @@ async function syncToCalendar(workPackages: WorkPackage[]) {
         eventId,
         requestBody: event,
       });
-      console.log(`Updated: ${wp.subject} (${milestoneDate} ${startTime})`);
+      console.log(`Updated: ${wp.subject} (${milestoneDate})`);
     } catch (error: unknown) {
       if (error && typeof error === "object" && "code" in error && error.code === 404) {
         // Event doesn't exist, create it
@@ -160,7 +147,7 @@ async function syncToCalendar(workPackages: WorkPackage[]) {
           calendarId: GOOGLE_CALENDAR_ID,
           requestBody: { ...event, id: eventId },
         });
-        console.log(`Created: ${wp.subject} (${milestoneDate} ${startTime})`);
+        console.log(`Created: ${wp.subject} (${milestoneDate})`);
       } else {
         console.error(`Failed to sync "${wp.subject}":`, error);
       }
