@@ -102,28 +102,34 @@ async function reverseSync() {
     const storedHash = extendedProps.contentHash;
     const workPackageId = extendedProps.workPackageId;
 
+    // Debug: log event details
+    const eventDate = event.start?.date || event.start?.dateTime?.split("T")[0];
+    const eventSummary = event.summary || "";
+    console.log(`\nEvent: ${eventId}`);
+    console.log(`  Summary: ${eventSummary}`);
+    console.log(`  Date: ${eventDate}`);
+    console.log(`  Stored hash: ${storedHash}`);
+    console.log(`  WorkPackageId: ${workPackageId}`);
+
     if (!workPackageId) {
-      console.log(`Skipping event ${eventId}: no workPackageId`);
+      console.log(`  -> Skipping: no workPackageId`);
       skippedCount++;
       continue;
     }
 
-    // Get the current event date
-    const eventDate = event.start?.date || event.start?.dateTime?.split("T")[0];
-    const eventSummary = event.summary || "";
-
     if (!eventDate) {
-      console.log(`Skipping event ${eventId}: no date`);
+      console.log(`  -> Skipping: no date`);
       skippedCount++;
       continue;
     }
 
     // Calculate current hash
     const currentHash = generateEventHash(eventDate, eventSummary);
+    console.log(`  Current hash: ${currentHash}`);
 
     // If hash matches, event hasn't been modified in Calendar - skip
     if (storedHash === currentHash) {
-      console.log(`Skipping event ${eventId}: no changes (hash matches)`);
+      console.log(`  -> Skipping: hash matches (no changes)`);
       skippedCount++;
       continue;
     }
