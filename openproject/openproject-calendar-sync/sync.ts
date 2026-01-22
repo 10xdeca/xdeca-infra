@@ -7,9 +7,18 @@ const OPENPROJECT_API_KEY = process.env.OPENPROJECT_API_KEY!;
 const GOOGLE_CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID!;
 const GOOGLE_SERVICE_ACCOUNT_JSON = process.env.GOOGLE_SERVICE_ACCOUNT_JSON!;
 
+// Melbourne timezone for calendar events
+const TIMEZONE = "Australia/Melbourne";
+
 // Generate a hash of event content for change detection
 function generateEventHash(date: string, summary: string): string {
   return createHash("md5").update(`${date}:${summary}`).digest("hex").slice(0, 16);
+}
+
+// Extract date (YYYY-MM-DD) from a dateTime string in Melbourne timezone
+function getDateInMelbourne(dateTimeString: string): string {
+  const date = new Date(dateTimeString);
+  return date.toLocaleDateString("en-CA", { timeZone: TIMEZONE }); // en-CA gives YYYY-MM-DD format
 }
 
 interface WorkPackage {
@@ -90,19 +99,30 @@ async function syncToCalendar(workPackages: WorkPackage[]) {
     const eventSummary = `🎯 [${wp._links.project.title}] ${wp.subject}`;
     const contentHash = generateEventHash(milestoneDate, eventSummary);
 
-    // Check if event exists and if the date has changed from Calendar side
+    // Check if event exists and if it needs conversion from all-day to timed
     let skipUpdate = false;
+    let needsRecreate = false;
     try {
       const existing = await calendar.events.get({
         calendarId: GOOGLE_CALENDAR_ID,
         eventId,
       });
-      const existingDate = existing.data.start?.date || existing.data.start?.dateTime?.split("T")[0];
+      const isAllDay = !!existing.data.start?.date;
+      const existingDate = existing.data.start?.date ||
+        (existing.data.start?.dateTime ? getDateInMelbourne(existing.data.start.dateTime) : undefined);
       const existingHash = existing.data.extendedProperties?.private?.contentHash;
+
+      console.log(`  Event ${wp.subject}: start.date=${existing.data.start?.date}, start.dateTime=${existing.data.start?.dateTime}, isAllDay=${isAllDay}`);
+
+      // If it's an all-day event, we need to delete and recreate as timed
+      if (isAllDay) {
+        needsRecreate = true;
+        console.log(`Converting ${wp.subject} from all-day to timed event`);
+      }
 
       // If Calendar date differs from OpenProject AND hash doesn't match stored hash,
       // it means Calendar was modified by user - skip this update
-      if (existingDate && existingDate !== milestoneDate && existingHash !== contentHash) {
+      if (!needsRecreate && existingDate && existingDate !== milestoneDate && existingHash !== contentHash) {
         console.log(`Skipping ${wp.subject}: Calendar has different date (${existingDate}), pending reverse sync`);
         skipUpdate = true;
       }
@@ -112,6 +132,18 @@ async function syncToCalendar(workPackages: WorkPackage[]) {
 
     if (skipUpdate) continue;
 
+    // Delete existing all-day event before recreating as timed
+    if (needsRecreate) {
+      try {
+        await calendar.events.delete({
+          calendarId: GOOGLE_CALENDAR_ID,
+          eventId,
+        });
+      } catch {
+        // Ignore delete errors
+      }
+    }
+
     const event = {
       summary: eventSummary,
       description: [
@@ -120,8 +152,8 @@ async function syncToCalendar(workPackages: WorkPackage[]) {
         `Type: ${wp._links.type.title}`,
         `OpenProject: ${OPENPROJECT_URL}/work_packages/${wp.id}`,
       ].join("\n"),
-      start: { date: milestoneDate },
-      end: { date: milestoneDate },
+      start: { dateTime: `${milestoneDate}T12:00:00`, timeZone: TIMEZONE },
+      end: { dateTime: `${milestoneDate}T12:00:00`, timeZone: TIMEZONE },
       transparency: "transparent", // Don't block time
       extendedProperties: {
         private: {
@@ -133,13 +165,22 @@ async function syncToCalendar(workPackages: WorkPackage[]) {
     };
 
     try {
-      // Try to update existing event
-      await calendar.events.update({
-        calendarId: GOOGLE_CALENDAR_ID,
-        eventId,
-        requestBody: event,
-      });
-      console.log(`Updated: ${wp.subject} (${milestoneDate})`);
+      if (needsRecreate) {
+        // Create new timed event (after deleting all-day version)
+        await calendar.events.insert({
+          calendarId: GOOGLE_CALENDAR_ID,
+          requestBody: { ...event, id: eventId },
+        });
+        console.log(`Recreated as timed: ${wp.subject} (${milestoneDate})`);
+      } else {
+        // Try to update existing event
+        await calendar.events.update({
+          calendarId: GOOGLE_CALENDAR_ID,
+          eventId,
+          requestBody: event,
+        });
+        console.log(`Updated: ${wp.subject} (${milestoneDate})`);
+      }
     } catch (error: unknown) {
       if (error && typeof error === "object" && "code" in error && error.code === 404) {
         // Event doesn't exist, create it

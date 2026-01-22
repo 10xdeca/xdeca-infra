@@ -6,6 +6,15 @@ const OPENPROJECT_API_KEY = process.env.OPENPROJECT_API_KEY!;
 const GOOGLE_CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID!;
 const GOOGLE_SERVICE_ACCOUNT_JSON = process.env.GOOGLE_SERVICE_ACCOUNT_JSON!;
 
+// Melbourne timezone for calendar events
+const TIMEZONE = "Australia/Melbourne";
+
+// Extract date (YYYY-MM-DD) from a dateTime string in Melbourne timezone
+function getDateInMelbourne(dateTimeString: string): string {
+  const date = new Date(dateTimeString);
+  return date.toLocaleDateString("en-CA", { timeZone: TIMEZONE }); // en-CA gives YYYY-MM-DD format
+}
+
 interface CalendarEvent {
   id?: string | null;
   summary?: string | null;
@@ -133,7 +142,8 @@ async function reverseSync() {
     const wpId = workPackageId || extractedWpId;
 
     // Get event details
-    const calendarDate = event.start?.date || event.start?.dateTime?.split("T")[0];
+    const calendarDate = event.start?.date ||
+      (event.start?.dateTime ? getDateInMelbourne(event.start.dateTime) : undefined);
     const eventSummary = event.summary || "";
 
     console.log(`\nEvent: ${eventId}`);
