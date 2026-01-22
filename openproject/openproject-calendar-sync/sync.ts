@@ -76,9 +76,9 @@ async function getCalendarClient() {
 }
 
 function generateEventId(workPackageId: number): string {
-  // Google Calendar event IDs must be lowercase alphanumeric
-  // Using "v2" suffix for timed events (v1 all-day events may be in trash)
-  return `openprojectv2wp${workPackageId}`;
+  // Google Calendar event IDs must be lowercase alphanumeric (a-z, 0-9)
+  // Using "timed" suffix to differentiate from old all-day events in trash
+  return `openprojecttimed${workPackageId}`;
 }
 
 async function syncToCalendar(workPackages: WorkPackage[]) {

@@ -138,10 +138,10 @@ async function reverseSync() {
     const workPackageId = extendedProps.workPackageId;
 
     // Extract workPackageId from event ID if not in extendedProperties
-    // Handle both old format (openproject{id}) and new format (openprojectv2wp{id})
+    // Handle both old format (openproject{id}) and new format (openprojecttimed{id})
     let extractedWpId: string | null = null;
-    if (eventId?.startsWith("openprojectv2wp")) {
-      extractedWpId = eventId.replace("openprojectv2wp", "");
+    if (eventId?.startsWith("openprojecttimed")) {
+      extractedWpId = eventId.replace("openprojecttimed", "");
     } else if (eventId?.startsWith("openproject")) {
       extractedWpId = eventId.replace("openproject", "");
     }
