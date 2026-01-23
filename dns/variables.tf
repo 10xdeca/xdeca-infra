@@ -13,7 +13,7 @@ variable "namecheap_api_key" {
 variable "kamatera_ip" {
   description = "Kamatera VPS IP address"
   type        = string
-  default     = "103.125.218.210"
+  default     = "45.151.153.65"
 }
 
 variable "domain" {
