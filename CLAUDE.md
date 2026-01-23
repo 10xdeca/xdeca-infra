@@ -6,6 +6,7 @@ Monorepo for xdeca infrastructure and self-hosted services.
 
 ```
 .
+├── backups/            # Backup config (OCI Object Storage)
 ├── caddy/              # Reverse proxy (Caddy)
 ├── cloudflare/         # Cloudflare Terraform (unused)
 ├── discourse/          # Forum (Discourse)
@@ -14,6 +15,8 @@ Monorepo for xdeca infrastructure and self-hosted services.
 ├── twenty/             # CRM (Twenty)
 ├── oci-vps/            # Oracle Cloud provisioning
 ├── kamatera-vps/       # Kamatera VPS (primary)
+├── scripts/            # Deployment & backup scripts
+├── docs/               # Documentation
 └── .sops.yaml          # SOPS encryption config
 ```
 
@@ -43,6 +46,30 @@ Google Calendar ──push──▶ VPS ──▶ OpenProject
 Self-hosted webhook server on VPS. Events appear at 12pm Melbourne time.
 
 **Status**: Automated via IaC. First deploy requires secrets setup. See `openproject/CLAUDE.md`.
+
+## Backups
+
+Daily backups to Oracle Cloud Object Storage (Standard tier, first 10GB free).
+
+| Service | Schedule | Retention |
+|---------|----------|-----------|
+| OpenProject | 4 AM | 7 days |
+| Twenty | 4 AM | 7 days |
+| Discourse | 3 AM | 7 days |
+
+**Status**: Automated via IaC. First deploy requires `backups/secrets.yaml`. See `docs/backups.md`.
+
+**Auto-restore**: On `make deploy`, if databases are empty and backups exist, restores automatically.
+
+```bash
+# Disaster recovery (auto-restores)
+make apply && make deploy
+
+# Manual commands
+make backup-now    # Run backup
+make backup-test   # Test connection
+make restore       # Force restore from latest
+```
 
 ## Cloud Providers
 

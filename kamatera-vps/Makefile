@@ -62,6 +62,18 @@ deploy:
 deploy-%:
 	../scripts/deploy-to.sh $$(cd terraform && terraform output -raw instance_public_ip) $*
 
+# Test backup connection
+backup-test:
+	ssh ubuntu@$$(cd terraform && terraform output -raw instance_public_ip) "rclone lsd oci-archive:"
+
+# Run backup manually
+backup-now:
+	ssh ubuntu@$$(cd terraform && terraform output -raw instance_public_ip) "/opt/scripts/backup.sh all"
+
+# Restore from latest backups (manual trigger)
+restore:
+	../scripts/deploy-to.sh $$(cd terraform && terraform output -raw instance_public_ip) restore
+
 # Secrets management
 secrets-create:
 	@if [ ! -f kamatera.yaml ]; then \
@@ -107,6 +119,14 @@ help:
 	@echo "  make secrets-edit  - Edit encrypted credentials"
 	@echo ""
 	@echo "Deploy:"
-	@echo "  make deploy              - Deploy all services"
-	@echo "  make deploy-caddy        - Deploy Caddy only"
+	@echo "  make deploy               - Deploy all services"
+	@echo "  make deploy-caddy         - Deploy Caddy only"
+	@echo "  make deploy-backups       - Deploy backup config only"
 	@echo "  make deploy-calendar-sync - Deploy calendar sync only"
+	@echo ""
+	@echo "Backups:"
+	@echo "  make backup-test   - Test rclone connection"
+	@echo "  make backup-now    - Run backup immediately"
+	@echo "  make restore       - Restore from latest backups"
+	@echo ""
+	@echo "Note: Auto-restore runs on 'make deploy' if databases are empty"

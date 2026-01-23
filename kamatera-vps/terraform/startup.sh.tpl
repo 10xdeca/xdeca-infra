@@ -57,6 +57,11 @@ chown ubuntu:ubuntu /opt/scripts
 # Install rclone for backups
 curl https://rclone.org/install.sh | bash
 
+# Note: OCI CLI is needed for archive restore but requires manual config
+# Install it but config is done manually if restore is needed:
+#   oci setup config
+# For most cases, just use OCI Console to restore archived objects
+
 # Set up keep-alive (for consistency with OCI setup, though not needed for Kamatera)
 cat > /opt/scripts/keep-alive.sh << 'KEEPALIVE'
 #!/bin/bash

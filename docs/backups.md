@@ -1,6 +1,6 @@
 # Backup & Restore
 
-All services backup to **Oracle Cloud Object Storage** (Archive tier).
+All services backup to **Oracle Cloud Object Storage** (Standard tier).
 
 ## Overview
 
@@ -13,24 +13,44 @@ All services backup to **Oracle Cloud Object Storage** (Archive tier).
 ## Cost
 
 - **First 10GB: Free** (Oracle Always Free tier)
-- After 10GB: ~$0.0026/GB/month (Archive tier)
+- After 10GB: ~$0.026/GB/month (Standard tier)
 - Typical total: <1GB (well within free tier)
 
-## Setup
+## Setup (IaC)
 
-Run once after VPS provisioning:
+### 1. Create OCI Customer Secret Key
 
 ```bash
-ssh ubuntu@<vps-ip>
-cd ~/apps
-./scripts/setup-backups.sh
+# Get your namespace
+oci os ns get
+
+# In OCI Console:
+# Identity → Users → Your User → Customer Secret Keys → Generate
+# Name: rclone-backups
+# COPY THE SECRET KEY (shown only once!)
 ```
 
-The setup script will:
-1. Install rclone
-2. Guide you through OCI credential setup
-3. Create the backup bucket (Archive tier)
-4. Configure daily cron job at 4 AM
+### 2. Create Secrets File
+
+```bash
+cd backups
+cp secrets.yaml.example secrets.yaml
+# Edit with your OCI credentials
+sops -e -i secrets.yaml
+```
+
+### 3. Deploy
+
+```bash
+cd kamatera-vps
+make deploy-backups
+```
+
+This deploys:
+- rclone config with OCI credentials
+- Backup/restore scripts to `/opt/scripts/`
+- Creates bucket if needed
+- Verifies cron job (4 AM daily)
 
 ## Manual Operations
 
@@ -69,9 +89,35 @@ sudo /opt/scripts/backup.sh cleanup
 
 ## Restore
 
-### Important: Archive Storage Delay
+Using Standard tier storage - **no restore delay**, objects are immediately available.
 
-Oracle Archive Storage requires **~1 hour** to restore objects before download. The restore script handles this automatically, but be aware of the delay.
+### Auto-Restore on Deploy
+
+When running `make deploy`, the system automatically:
+1. Checks if OpenProject/Twenty/Discourse are empty (fresh install)
+2. If empty AND backups exist, restores from latest backup
+3. Skips restore if data already exists
+
+This means disaster recovery is automatic:
+```bash
+make apply    # Provision new VPS
+make deploy   # Deploy services + auto-restore from backup
+```
+
+### Fresh Install Detection
+
+| Service | Fresh Install Detected When |
+|---------|----------------------------|
+| OpenProject | `users` table has ≤1 row |
+| Twenty | `workspace` table is empty |
+| Discourse | ≤2 topics (welcome + system) |
+
+### Manual Restore
+
+To force restore (overwrites existing data):
+```bash
+make restore
+```
 
 ### Restore Commands
 

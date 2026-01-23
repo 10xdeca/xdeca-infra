@@ -33,9 +33,9 @@ backup_openproject() {
 
   local backup_file="$BACKUP_DIR/openproject-$DATE.sql.gz"
 
-  # Dump PostgreSQL (OpenProject uses internal postgres)
-  podman exec openproject_openproject_1 \
-    pg_dump -U postgres openproject | gzip > "$backup_file"
+  # Dump PostgreSQL (OpenProject uses internal postgres, must run as postgres user)
+  podman exec -u postgres openproject_openproject_1 \
+    pg_dump openproject | gzip > "$backup_file"
 
   # Upload to object storage
   rclone copy "$backup_file" "$RCLONE_REMOTE:$BUCKET/openproject/"
