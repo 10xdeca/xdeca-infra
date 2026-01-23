@@ -47,6 +47,12 @@ destroy: state-pull
 	cd terraform && terraform destroy
 	@$(MAKE) state-push
 
+# Destroy without prompting (for scripts)
+destroy-force: state-pull
+	$(call load_secrets)
+	cd terraform && terraform destroy -auto-approve
+	@$(MAKE) state-push
+
 # Get instance IP
 ip:
 	@cd terraform && terraform output -raw instance_public_ip
@@ -79,7 +85,7 @@ teardown:
 	@echo "Running final backup before teardown..."
 	ssh ubuntu@$$(cd terraform && terraform output -raw instance_public_ip) "/opt/scripts/backup.sh all"
 	@echo "Backup complete. Destroying VPS..."
-	$(MAKE) destroy
+	$(MAKE) destroy-force
 	@echo "Teardown complete. Run 'make apply && make deploy' to restore."
 
 # Secrets management
