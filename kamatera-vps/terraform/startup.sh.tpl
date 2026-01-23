@@ -94,7 +94,7 @@ cat > /home/ubuntu/README.md << 'README'
   openproject/   - Project management
   twenty/        - CRM
   discourse/     - Forum
-  calendar-sync/ - OpenProject ↔ Google Calendar sync
+  calendar-sync/ - OpenProject <-> Google Calendar sync
 
 ## Commands
 cd ~/apps/<service>
