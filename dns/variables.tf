@@ -10,10 +10,10 @@ variable "namecheap_api_key" {
   sensitive   = true
 }
 
-variable "kamatera_ip" {
-  description = "Kamatera VPS IP address"
+variable "lightsail_ip" {
+  description = "AWS Lightsail VPS IP address"
   type        = string
-  default     = "45.151.153.65"
+  default     = "13.54.159.183"
 }
 
 variable "domain" {
