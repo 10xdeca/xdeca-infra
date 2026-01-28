@@ -1,6 +1,6 @@
 services:
   kanbn:
-    image: ghcr.io/kanbn/kan:latest
+    image: ghcr.io/10xdeca/kan:latest
     container_name: kanbn
     restart: unless-stopped
     depends_on:
@@ -27,6 +27,9 @@ services:
       - NEXT_PUBLIC_STORAGE_URL=${NEXT_PUBLIC_STORAGE_URL}
       - NEXT_PUBLIC_AVATAR_BUCKET_NAME=kanbn-avatars
       - NEXT_PUBLIC_ATTACHMENTS_BUCKET_NAME=kanbn-attachments
+      # Webhooks (for calendar sync)
+      - WEBHOOK_URL=${WEBHOOK_URL}
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET}
     ports:
       - "3003:3000"
     networks:

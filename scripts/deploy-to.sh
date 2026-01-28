@@ -277,7 +277,9 @@ TRELLO_API_SECRET=\(.trello_api_secret)
 S3_ENDPOINT=\(.s3_endpoint)
 S3_ACCESS_KEY_ID=\(.s3_access_key_id)
 S3_SECRET_ACCESS_KEY=\(.s3_secret_access_key)
-NEXT_PUBLIC_STORAGE_URL=\(.next_public_storage_url)"' > "$REPO_ROOT/kanbn/.env"
+NEXT_PUBLIC_STORAGE_URL=\(.next_public_storage_url)
+WEBHOOK_URL=\(.webhook_url)
+WEBHOOK_SECRET=\(.webhook_secret)"' > "$REPO_ROOT/kanbn/.env"
 
     # Deploy files
     ssh $REMOTE "mkdir -p ~/apps/kanbn"
