@@ -249,7 +249,7 @@ echo "CouchDB configured!"
 EOF
 
     echo "Obsidian LiveSync deployed!"
-    echo "  URL: https://\$(grep OBSIDIAN_HOSTNAME $REPO_ROOT/obsidian-livesync/.env | cut -d= -f2)"
+    echo "  URL: https://$(grep OBSIDIAN_HOSTNAME "$REPO_ROOT/obsidian-livesync/.env" | cut -d= -f2)"
 }
 
 auto_restore() {
