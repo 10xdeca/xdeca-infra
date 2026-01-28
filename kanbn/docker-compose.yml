@@ -1,6 +1,7 @@
 services:
   kanbn:
-    image: ghcr.io/10xdeca/kan:latest
+    build: https://github.com/10xdeca/kan.git
+    image: kanbn:local
     container_name: kanbn
     restart: unless-stopped
     depends_on:
