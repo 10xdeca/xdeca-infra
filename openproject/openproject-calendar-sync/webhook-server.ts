@@ -1,4 +1,5 @@
 import { createServer } from "http";
+import { createHmac } from "crypto";
 import { spawn } from "child_process";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
@@ -8,6 +9,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // Secrets from environment
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET!;
 const GCAL_WEBHOOK_SECRET = process.env.GCAL_WEBHOOK_SECRET!;
+const KANBN_WEBHOOK_SECRET = process.env.KANBN_WEBHOOK_SECRET!;
 
 const PORT = process.env.PORT || 3001;
 
@@ -121,6 +123,43 @@ const server = createServer((req, res) => {
     return;
   }
 
+  // Kan.bn webhook (card events)
+  if (url.pathname === "/kanbn") {
+    let body = "";
+    req.on("data", (chunk) => (body += chunk));
+    req.on("end", () => {
+      // Verify signature if secret is set
+      if (KANBN_WEBHOOK_SECRET) {
+        const signature = req.headers["x-webhook-signature"] as string;
+        const expectedSignature = createHmac("sha256", KANBN_WEBHOOK_SECRET)
+          .update(body)
+          .digest("hex");
+        if (signature !== expectedSignature) {
+          console.log("Invalid Kan.bn webhook signature");
+          res.writeHead(401);
+          res.end("Unauthorized");
+          return;
+        }
+      }
+
+      try {
+        const payload = JSON.parse(body);
+        console.log(`Kan.bn webhook: ${payload.event}`, JSON.stringify(payload.data, null, 2));
+
+        // TODO: Implement Google Calendar sync for card due dates
+        // For now, just log the webhook
+
+        res.writeHead(200);
+        res.end("OK");
+      } catch (error) {
+        console.error("Failed to parse Kan.bn webhook:", error);
+        res.writeHead(400);
+        res.end("Bad Request");
+      }
+    });
+    return;
+  }
+
   res.writeHead(404);
   res.end("Not Found");
 });
@@ -130,5 +169,6 @@ server.listen(PORT, () => {
   console.log("Endpoints:");
   console.log(`  POST /openproject?token=<secret> - OpenProject webhook`);
   console.log(`  POST /gcal?token=<secret> - Google Calendar webhook`);
+  console.log(`  POST /kanbn - Kan.bn card webhook (uses X-Webhook-Signature)`);
   console.log(`  GET /health - Health check`);
 });

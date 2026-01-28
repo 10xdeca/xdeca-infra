@@ -6,7 +6,7 @@ calendar-sync.enspyr.co {
     reverse_proxy localhost:3001
 }
 
-wiki.enspyr.co {
+wiki.enspyr.co, wiki.xdeca.com {
     reverse_proxy localhost:3002
 }
 
