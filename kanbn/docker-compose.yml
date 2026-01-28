@@ -1,0 +1,40 @@
+services:
+  kanbn:
+    image: ghcr.io/kanbn/kan:latest
+    container_name: kanbn
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    environment:
+      - NEXT_PUBLIC_BASE_URL=${KANBN_URL}
+      - BETTER_AUTH_SECRET=${AUTH_SECRET}
+      - POSTGRES_URL=postgres://kanbn:${POSTGRES_PASSWORD}@postgres:5432/kanbn
+      - NEXT_PUBLIC_ALLOW_CREDENTIALS=true
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USER=${SMTP_USERNAME}
+      - SMTP_PASS=${SMTP_PASSWORD}
+      - SMTP_FROM=${SMTP_FROM_EMAIL}
+    ports:
+      - "3003:3000"
+    networks:
+      - kanbn
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: kanbn_postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=kanbn
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=kanbn
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - kanbn
+
+volumes:
+  postgres_data:
+
+networks:
+  kanbn:

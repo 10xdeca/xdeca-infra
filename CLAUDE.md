@@ -28,6 +28,7 @@ Monorepo for xdeca infrastructure and self-hosted services.
 | Calendar Sync | 3001 | calendar-sync.enspyr.co | OpenProject ↔ Google Calendar |
 | Outline | 3002 | wiki.enspyr.co | Team wiki (Notion-like) |
 | MinIO (Outline storage) | 9000 | storage.enspyr.co | S3-compatible file storage |
+| Kan.bn | 3003 | kanbn.enspyr.co | Kanban boards (Trello-like) |
 
 ## Integrations
 
@@ -182,6 +183,7 @@ Internet → Caddy (443/80) → OpenProject (8080)
                           → Calendar Sync (3001)
                           → Outline (3002)
                           → MinIO Storage (9000)
+                          → Kan.bn (3003)
 ```
 
 ---
@@ -242,3 +244,32 @@ sops -e -i outline/secrets.yaml
 ## First Login
 
 First user to sign up becomes admin. Invite team members from Settings → Members.
+
+---
+
+# kanbn
+
+Self-hosted kanban boards (Trello alternative). Lightweight and fast.
+
+**URL**: https://kanbn.enspyr.co
+
+## Features
+
+- Trello-like kanban boards
+- Drag and drop cards
+- Labels and filters
+- Trello import
+- Email/password login
+
+## Setup
+
+**Status**: Fully automated via IaC. Secrets encrypted with SOPS.
+
+```bash
+# Deploy (secrets auto-decrypted)
+./scripts/deploy-to.sh 13.54.159.183 kanbn
+```
+
+## First Login
+
+First user to sign up becomes admin.

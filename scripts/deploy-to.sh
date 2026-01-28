@@ -1,7 +1,7 @@
 #!/bin/bash
 # Deploy services to any VPS
 # Usage: ./scripts/deploy-to.sh <ip> [service]
-# Services: all, caddy, openproject, calendar-sync, outline, backups, scripts
+# Services: all, caddy, openproject, calendar-sync, outline, kanbn, backups, scripts
 
 set -e
 
@@ -249,6 +249,45 @@ SMTP_SECURE=\(.smtp_secure)"' > "$REPO_ROOT/outline/.env"
     echo "  Note: First user to sign in becomes admin"
 }
 
+deploy_kanbn() {
+    echo "Deploying Kan.bn..."
+
+    local KANBN_SECRETS="$REPO_ROOT/kanbn/secrets.yaml"
+
+    # Check for secrets file
+    if [ ! -f "$KANBN_SECRETS" ]; then
+        echo "ERROR: kanbn/secrets.yaml not found"
+        echo "Create it and encrypt with: sops -e -i kanbn/secrets.yaml"
+        return 1
+    fi
+
+    # Generate .env from encrypted secrets
+    echo "Generating .env from encrypted secrets..."
+    sops -d "$KANBN_SECRETS" | yq -r '"# Kan.bn Configuration (auto-generated from secrets.yaml)
+KANBN_URL=\(.kanbn_url)
+AUTH_SECRET=\(.auth_secret)
+POSTGRES_PASSWORD=\(.postgres_password)
+SMTP_HOST=\(.smtp_host)
+SMTP_PORT=\(.smtp_port)
+SMTP_USERNAME=\(.smtp_username)
+SMTP_PASSWORD=\(.smtp_password)
+SMTP_FROM_EMAIL=\(.smtp_from_email)"' > "$REPO_ROOT/kanbn/.env"
+
+    # Deploy files
+    ssh $REMOTE "mkdir -p ~/apps/kanbn"
+    rsync -avz --delete --exclude 'secrets.yaml' "$REPO_ROOT/kanbn/" $REMOTE:~/apps/kanbn/
+
+    # Clean up local .env
+    rm -f "$REPO_ROOT/kanbn/.env"
+
+    # Start Kan.bn
+    ssh $REMOTE "cd ~/apps/kanbn && docker-compose pull && docker-compose up -d"
+
+    echo "Kan.bn deployed!"
+    echo "  URL: https://kanbn.enspyr.co"
+    echo "  Note: First user to sign up becomes admin"
+}
+
 auto_restore() {
     echo "Checking if restore from backup is needed..."
 
@@ -310,6 +349,7 @@ case $SERVICE in
         deploy_service openproject
         deploy_calendar_sync
         deploy_outline
+        deploy_kanbn
         auto_restore
         ;;
     scripts)
@@ -327,13 +367,16 @@ case $SERVICE in
     outline|wiki)
         deploy_outline
         ;;
+    kanbn)
+        deploy_kanbn
+        ;;
     restore)
         restore_openproject
         echo "Restore complete!"
         ;;
     *)
         echo "Unknown service: $SERVICE"
-        echo "Usage: $0 <ip> [all|caddy|openproject|calendar-sync|outline|backups|scripts|restore]"
+        echo "Usage: $0 <ip> [all|caddy|openproject|calendar-sync|outline|kanbn|backups|scripts|restore]"
         exit 1
         ;;
 esac
