@@ -271,7 +271,9 @@ SMTP_HOST=\(.smtp_host)
 SMTP_PORT=\(.smtp_port)
 SMTP_USERNAME=\(.smtp_username)
 SMTP_PASSWORD=\(.smtp_password)
-SMTP_FROM_EMAIL=\(.smtp_from_email)"' > "$REPO_ROOT/kanbn/.env"
+SMTP_FROM_EMAIL=\(.smtp_from_email)
+TRELLO_API_KEY=\(.trello_api_key)
+TRELLO_API_SECRET=\(.trello_api_secret)"' > "$REPO_ROOT/kanbn/.env"
 
     # Deploy files
     ssh $REMOTE "mkdir -p ~/apps/kanbn"
