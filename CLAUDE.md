@@ -6,7 +6,7 @@ Monorepo for xdeca infrastructure and self-hosted services.
 
 ```
 .
-├── backups/            # Backup config (OCI Object Storage)
+├── backups/            # Backup config (AWS S3)
 ├── caddy/              # Reverse proxy (Caddy)
 ├── cloudflare/         # Cloudflare Terraform (unused)
 ├── dns/                # Namecheap DNS (Terraform)
@@ -179,6 +179,7 @@ Reverse proxy with automatic HTTPS via Let's Encrypt.
 ```
 Internet → Caddy (443/80) → OpenProject (8080)
                           → Calendar Sync (3001)
+                          → Obsidian LiveSync (5984)
 ```
 
 ---

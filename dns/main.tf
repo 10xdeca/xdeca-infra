@@ -19,4 +19,12 @@ resource "namecheap_domain_records" "enspyr" {
     address  = var.lightsail_ip
     ttl      = 1800
   }
+
+  # Obsidian LiveSync
+  record {
+    hostname = "obsidian"
+    type     = "A"
+    address  = var.lightsail_ip
+    ttl      = 1800
+  }
 }
