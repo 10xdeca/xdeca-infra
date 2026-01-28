@@ -264,10 +264,28 @@ SMTP via Brevo (same credentials as OpenProject in `openproject/secrets.yaml`).
 
 ## Setup
 
-1. Copy `.env.example` to `.env`
-2. Generate secrets: `openssl rand -hex 32` (for SECRET_KEY and UTILS_SECRET)
-3. Add SMTP credentials (from `openproject/secrets.yaml`)
-4. Deploy: `./scripts/deploy-to.sh <ip> outline`
+**Status**: Fully automated via IaC. Secrets encrypted with SOPS.
+
+```bash
+# Deploy (secrets auto-decrypted)
+./scripts/deploy-to.sh 13.54.159.183 outline
+```
+
+### First-Time Secrets Setup
+
+```bash
+# Copy template
+cp outline/secrets.yaml.example outline/secrets.yaml
+
+# Edit with your values (generate secrets with: openssl rand -hex 32)
+nano outline/secrets.yaml
+
+# Encrypt
+sops -e -i outline/secrets.yaml
+
+# Deploy
+./scripts/deploy-to.sh 13.54.159.183 outline
+```
 
 ## First Login
 
