@@ -1,7 +1,7 @@
 #!/bin/bash
 # Deploy services to any VPS
 # Usage: ./scripts/deploy-to.sh <ip> [service]
-# Services: all, caddy, openproject, twenty, calendar-sync, backups, scripts
+# Services: all, caddy, openproject, calendar-sync, backups, scripts
 
 set -e
 
@@ -11,7 +11,7 @@ export SOPS_AGE_KEY_FILE="${SOPS_AGE_KEY_FILE:-$HOME/.config/sops/age/keys.txt}"
 if [ -z "$1" ]; then
   echo "Usage: $0 <ip> [service]"
   echo "  ip: VPS IP address or hostname"
-  echo "  service: all|caddy|openproject|twenty|scripts (default: all)"
+  echo "  service: all|caddy|openproject|calendar-sync|backups|scripts (default: all)"
   exit 1
 fi
 
@@ -36,10 +36,6 @@ OPENPROJECT_SMTP_PASSWORD=\(.smtp_password)
 OPENPROJECT_SMTP_DOMAIN=\(.smtp_domain)
 OPENPROJECT_MAIL_FROM=\(.mail_from)"' > "$REPO_ROOT/openproject/.env"
     fi
-
-    if [ -f "$REPO_ROOT/twenty/secrets.yaml" ]; then
-        sops -d "$REPO_ROOT/twenty/secrets.yaml" | yq -r '"TWENTY_HOSTNAME=\(.hostname)\nPOSTGRES_PASSWORD=\(.postgres_password)\nAPP_SECRET=\(.app_secret)\nACCESS_TOKEN_SECRET=\(.access_token_secret)\nLOGIN_TOKEN_SECRET=\(.login_token_secret)\nREFRESH_TOKEN_SECRET=\(.refresh_token_secret)\nFILE_TOKEN_SECRET=\(.file_token_secret)"' > "$REPO_ROOT/twenty/.env"
-    fi
 }
 
 deploy_scripts() {
@@ -55,7 +51,7 @@ deploy_service() {
     echo "Deploying $svc..."
     ssh $REMOTE "mkdir -p ~/apps/$svc"
     rsync -avz --delete "$REPO_ROOT/$svc/" $REMOTE:~/apps/$svc/
-    ssh $REMOTE "cd ~/apps/$svc && docker compose pull && docker compose up -d"
+    ssh $REMOTE "cd ~/apps/$svc && docker-compose pull && docker-compose up -d"
 }
 
 deploy_calendar_sync() {
@@ -219,7 +215,7 @@ auto_restore() {
 
     # Check OpenProject - if fresh install, users table has only 1 row (admin)
     echo "Checking OpenProject database..."
-    local op_user_count=$(ssh $REMOTE "podman exec -u postgres openproject_openproject_1 psql -t -c 'SELECT COUNT(*) FROM users;' openproject 2>/dev/null | tr -d ' '" || echo "0")
+    local op_user_count=$(ssh $REMOTE "docker exec -u postgres openproject_openproject_1 psql -t -c 'SELECT COUNT(*) FROM users;' openproject 2>/dev/null | tr -d ' '" || echo "0")
 
     if [ "$op_user_count" = "1" ] || [ "$op_user_count" = "0" ]; then
         echo "OpenProject appears fresh (user count: $op_user_count), restoring from backup..."
@@ -227,20 +223,6 @@ auto_restore() {
     else
         echo "OpenProject has data (user count: $op_user_count), skipping restore"
     fi
-
-    # Check Twenty - if fresh install, workspace table is empty
-    echo "Checking Twenty database..."
-    local twenty_workspace_count=$(ssh $REMOTE "podman exec twenty_db_1 psql -U twenty -t -c 'SELECT COUNT(*) FROM core.workspace;' twenty 2>/dev/null | tr -d ' '" || echo "error")
-
-    if [ "$twenty_workspace_count" = "0" ]; then
-        echo "Twenty appears fresh (no workspaces), restoring from backup..."
-        restore_twenty
-    elif [ "$twenty_workspace_count" = "error" ]; then
-        echo "Twenty not running or table doesn't exist, skipping restore"
-    else
-        echo "Twenty has data (workspace count: $twenty_workspace_count), skipping restore"
-    fi
-
 }
 
 restore_openproject() {
@@ -257,45 +239,13 @@ restore_openproject() {
     ssh $REMOTE "rclone copy s3:xdeca-backups/openproject/$latest /tmp/"
 
     echo "Restoring database..."
-    ssh $REMOTE "gunzip -c /tmp/$latest | podman exec -i -u postgres openproject_openproject_1 psql openproject"
+    ssh $REMOTE "gunzip -c /tmp/$latest | docker exec -i -u postgres openproject_openproject_1 psql openproject"
     ssh $REMOTE "rm /tmp/$latest"
 
     echo "Restarting OpenProject..."
-    ssh $REMOTE "cd ~/apps/openproject && podman-compose restart"
+    ssh $REMOTE "cd ~/apps/openproject && docker-compose restart"
 
     echo "OpenProject restored!"
-}
-
-restore_twenty() {
-    echo "Restoring Twenty from latest backup..."
-
-    # Find latest DB backup
-    local latest_db=$(ssh $REMOTE "rclone ls s3:xdeca-backups/twenty/ 2>/dev/null | grep 'db' | sort -k2 | tail -1 | awk '{print \$2}'")
-    if [ -z "$latest_db" ]; then
-        echo "No Twenty backup found"
-        return 1
-    fi
-
-    echo "Downloading: $latest_db"
-    ssh $REMOTE "rclone copy s3:xdeca-backups/twenty/$latest_db /tmp/"
-
-    echo "Restoring database..."
-    ssh $REMOTE "gunzip -c /tmp/$latest_db | podman exec -i twenty_db_1 psql -U twenty twenty"
-    ssh $REMOTE "rm /tmp/$latest_db"
-
-    # Check for storage backup
-    local latest_storage=$(ssh $REMOTE "rclone ls s3:xdeca-backups/twenty/ 2>/dev/null | grep 'storage' | sort -k2 | tail -1 | awk '{print \$2}'")
-    if [ -n "$latest_storage" ]; then
-        echo "Downloading storage: $latest_storage"
-        ssh $REMOTE "rclone copy s3:xdeca-backups/twenty/$latest_storage /tmp/"
-        ssh $REMOTE "podman run --rm -v twenty_server_data:/data -v /tmp:/backup alpine sh -c 'rm -rf /data/* && tar xzf /backup/$latest_storage -C /data'"
-        ssh $REMOTE "rm /tmp/$latest_storage"
-    fi
-
-    echo "Restarting Twenty..."
-    ssh $REMOTE "cd ~/apps/twenty && podman-compose restart"
-
-    echo "Twenty restored!"
 }
 
 decrypt_secrets
@@ -306,7 +256,6 @@ case $SERVICE in
         deploy_backups
         deploy_service caddy
         deploy_service openproject
-        deploy_service twenty
         deploy_calendar_sync
         auto_restore
         ;;
@@ -316,7 +265,7 @@ case $SERVICE in
     backups)
         deploy_backups
         ;;
-    caddy|openproject|twenty)
+    caddy|openproject)
         deploy_service $SERVICE
         ;;
     calendar-sync)
@@ -324,12 +273,11 @@ case $SERVICE in
         ;;
     restore)
         restore_openproject
-        restore_twenty
         echo "Restore complete!"
         ;;
     *)
         echo "Unknown service: $SERVICE"
-        echo "Usage: $0 <ip> [all|caddy|openproject|twenty|calendar-sync|backups|scripts|restore]"
+        echo "Usage: $0 <ip> [all|caddy|openproject|calendar-sync|backups|scripts|restore]"
         exit 1
         ;;
 esac

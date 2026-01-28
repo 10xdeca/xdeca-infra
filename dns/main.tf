@@ -1,4 +1,4 @@
-# DNS records for xdeca services on Kamatera VPS
+# DNS records for xdeca services on AWS Lightsail
 
 resource "namecheap_domain_records" "enspyr" {
   domain = var.domain
@@ -8,15 +8,7 @@ resource "namecheap_domain_records" "enspyr" {
   record {
     hostname = "openproject"
     type     = "A"
-    address  = var.kamatera_ip
-    ttl      = 1800
-  }
-
-  # Twenty CRM
-  record {
-    hostname = "twenty"
-    type     = "A"
-    address  = var.kamatera_ip
+    address  = var.lightsail_ip
     ttl      = 1800
   }
 
@@ -24,7 +16,7 @@ resource "namecheap_domain_records" "enspyr" {
   record {
     hostname = "calendar-sync"
     type     = "A"
-    address  = var.kamatera_ip
+    address  = var.lightsail_ip
     ttl      = 1800
   }
 }
