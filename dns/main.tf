@@ -1,5 +1,18 @@
 # DNS records for xdeca services on AWS Lightsail
 
+# Temporary: keep kanbn.enspyr.co for CNAME from tasks.xdeca.com
+resource "namecheap_domain_records" "enspyr" {
+  domain = "enspyr.co"
+  mode   = "MERGE"
+
+  record {
+    hostname = "kanbn"
+    type     = "A"
+    address  = var.lightsail_ip
+    ttl      = 1800
+  }
+}
+
 resource "namecheap_domain_records" "xdeca" {
   domain = "xdeca.com"
   mode   = "MERGE"
