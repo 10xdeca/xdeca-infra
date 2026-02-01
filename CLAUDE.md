@@ -2,6 +2,18 @@
 
 Monorepo for xdeca infrastructure and self-hosted services.
 
+## IMPORTANT: Production Server Safety
+
+**DO NOT run repeated/rapid commands on the production server (13.54.159.183).**
+
+The Lightsail VPS has limited resources (2GB RAM, 1 vCPU). Running many `docker exec`, `docker logs`, or SSH commands in quick succession can cause resource exhaustion and crash the server.
+
+**Instead:**
+- Set up a local dev environment to debug issues
+- Use `./scripts/deploy-to.sh` for deployments (tested, safe)
+- If you must debug production, run commands sparingly with pauses between them
+- To recover a crashed server: `aws lightsail stop-instance --instance-name xdeca --region ap-southeast-2` then `start-instance`
+
 ## Structure
 
 ```
@@ -179,7 +191,7 @@ Access at http://localhost:3002. First signup becomes admin.
 
 # kanbn
 
-Self-hosted kanban boards (Trello alternative). Using 10xdeca/kan fork with webhook support.
+Self-hosted kanban boards (Trello alternative). Using 10xdeca/kan fork.
 
 **URL**: https://tasks.xdeca.com
 
@@ -191,7 +203,6 @@ Self-hosted kanban boards (Trello alternative). Using 10xdeca/kan fork with webh
 - Trello import (boards, cards, lists)
 - File attachments (via shared MinIO storage)
 - Email/password login
-- Webhooks (10xdeca fork)
 
 ## Storage
 
