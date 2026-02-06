@@ -12,6 +12,7 @@ services:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - SPRINT_START_DATE=${SPRINT_START_DATE:-2025-01-05}
       - REMINDER_INTERVAL_HOURS=${REMINDER_INTERVAL_HOURS:-1}
+      - ADMIN_USER_IDS=${ADMIN_USER_IDS}
     volumes:
       - kan_bot_data:/app/data
 
