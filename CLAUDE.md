@@ -55,6 +55,69 @@ The Lightsail VPS has limited resources (2GB RAM, 1 vCPU). Running many `docker 
 | Outline | 3002 | wiki.xdeca.com | Team wiki (Notion-like) |
 | MinIO | 9000 | storage.xdeca.com | S3-compatible file storage |
 
+## Container Architecture
+
+Each service has its own `docker-compose.yml` and isolated network. Caddy uses `network_mode: host` to bind directly to ports 80/443.
+
+```
+                                 Internet
+                                     │
+                           ┌─────────┴─────────┐
+                           │   Caddy (host)    │
+                           │   80/443 → TLS    │
+                           └─────────┬─────────┘
+                                     │
+         ┌───────────────────────────┼───────────────────────────┐
+         │                           │                           │
+         ▼                           ▼                           ▼
+┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐
+│ wiki.xdeca.com  │       │tasks.xdeca.com  │       │storage.xdeca.com│
+│   :3002         │       │   :3003         │       │   :9000         │
+└────────┬────────┘       └────────┬────────┘       └────────┬────────┘
+         │                         │                         │
+         ▼                         ▼                         │
+┌─────────────────┐       ┌─────────────────┐                │
+│    Outline      │       │     Kan.bn      │                │
+│  (wiki app)     │       │  (kanban app)   │                │
+└────────┬────────┘       └────────┬────────┘                │
+         │                         │                         │
+    ┌────┴────┐               ┌────┴────┐                    │
+    ▼         ▼               ▼         │                    │
+┌───────┐ ┌───────┐     ┌─────────┐     │                    │
+│Postgres│ │ Redis │     │Postgres │     │    ┌──────────────┘
+└───────┘ └───────┘     └─────────┘     │    │
+                                        │    ▼
+                              ┌─────────┴────────┐
+                              │      MinIO       │
+                              │ (shared storage) │
+                              │ outline, kanbn-* │
+                              └──────────────────┘
+
+
+┌─────────────────────────────────────────────────────────────────────┐
+│                         Kan Bot (standalone)                        │
+│                                                                     │
+│  ┌──────────┐    HTTP API     ┌──────────┐    Telegram    ┌──────┐ │
+│  │  SQLite  │◄───────────────►│  Bot     │◄──────────────►│Users │ │
+│  │ (local)  │                 │ (Node.js)│    Polling     │      │ │
+│  └──────────┘                 └────┬─────┘                └──────┘ │
+│                                    │                                │
+│                                    ▼                                │
+│                          tasks.xdeca.com                            │
+│                          (Kan.bn API)                               │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**Network isolation:**
+- `outline/` - own network with postgres, redis, minio
+- `kanbn/` - own network with postgres; uses shared MinIO via `storage.xdeca.com`
+- `kan-bot/` - no docker network; talks to Kan.bn via public API, Telegram via polling
+- `caddy/` - `network_mode: host` to bind 80/443 directly
+
+**Shared resources:**
+- MinIO (from Outline stack) serves both Outline and Kan.bn file storage
+- Caddy routes all HTTPS traffic to backend services on localhost
+
 ## Backups
 
 Daily backups to AWS S3.
