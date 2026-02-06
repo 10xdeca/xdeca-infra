@@ -247,7 +247,8 @@ KAN_SERVICE_API_KEY=\(.kan_service_api_key)
 ANTHROPIC_API_KEY=\(.anthropic_api_key)
 KAN_BASE_URL=\(.kan_base_url)
 SPRINT_START_DATE=\(.sprint_start_date)
-REMINDER_INTERVAL_HOURS=\(.reminder_interval_hours)"' > "$REPO_ROOT/kan-bot/.env"
+REMINDER_INTERVAL_HOURS=\(.reminder_interval_hours)
+ADMIN_USER_IDS=\(.admin_user_ids)"' > "$REPO_ROOT/kan-bot/.env"
 
     # Deploy files
     ssh "$REMOTE" "mkdir -p ~/apps/kan-bot/src"
