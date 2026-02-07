@@ -88,7 +88,7 @@ backup_to_github() {
     git clone --depth 1 "$GITHUB_BACKUP_REPO" "$GITHUB_BACKUP_DIR" 2>/dev/null || {
       # First push — repo may be empty
       mkdir -p "$GITHUB_BACKUP_DIR"
-      git -C "$GITHUB_BACKUP_DIR" init
+      git -C "$GITHUB_BACKUP_DIR" init -b main
       git -C "$GITHUB_BACKUP_DIR" remote add origin "$GITHUB_BACKUP_REPO"
     }
   fi

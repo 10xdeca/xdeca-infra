@@ -147,6 +147,9 @@ SSHEOF'
     ssh "$REMOTE" 'grep -q "Include config.d/\*" ~/.ssh/config 2>/dev/null || printf "Include config.d/*\n\n" | cat - ~/.ssh/config 2>/dev/null > /tmp/ssh_config_tmp && mv /tmp/ssh_config_tmp ~/.ssh/config || printf "Include config.d/*\n" > ~/.ssh/config'
     ssh "$REMOTE" "chmod 600 ~/.ssh/config ~/.ssh/config.d/xdeca-backups"
 
+    # Ensure GitHub host key is trusted
+    ssh "$REMOTE" 'ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null'
+
     # Print deploy key for operator
     echo ""
     echo "============================================"
