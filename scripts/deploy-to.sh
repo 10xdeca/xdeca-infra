@@ -23,11 +23,24 @@ REMOTE="ubuntu@$IP"
 echo "Deploying to $REMOTE..."
 
 deploy_scripts() {
-    echo "Deploying backup scripts..."
+    echo "Deploying scripts..."
     ssh "$REMOTE" "sudo mkdir -p /opt/scripts"
     rsync -avz "$REPO_ROOT/scripts/" "$REMOTE":/tmp/scripts/
     ssh "$REMOTE" "sudo mv /tmp/scripts/* /opt/scripts/ && sudo chmod +x /opt/scripts/*.sh"
-    echo "Backup scripts deployed to /opt/scripts/"
+
+    # Set up health check cron
+    local PM_BOT_SECRETS="$REPO_ROOT/xdeca-pm-bot/secrets.yaml"
+    if [ -f "$PM_BOT_SECRETS" ]; then
+        echo "Setting up health check cron..."
+        local BOT_TOKEN
+        BOT_TOKEN=$(sops -d "$PM_BOT_SECRETS" | yq -r '.telegram_bot_token')
+        ssh "$REMOTE" "echo '0 * * * * ubuntu TELEGRAM_BOT_TOKEN=$BOT_TOKEN TELEGRAM_CHAT_ID=-1003454984262 TELEGRAM_THREAD_ID=1953 /opt/scripts/health-check.sh >> /var/log/health-check.log 2>&1' | sudo tee /etc/cron.d/health-check > /dev/null"
+        echo "Health check cron installed (hourly)"
+    else
+        echo "WARNING: xdeca-pm-bot/secrets.yaml not found, skipping health check cron"
+    fi
+
+    echo "Scripts deployed to /opt/scripts/"
 }
 
 deploy_service() {
