@@ -20,7 +20,7 @@ The Lightsail VPS has limited resources (2GB RAM, 1 vCPU). Running many `docker 
 .
 ├── backups/            # Backup config (AWS S3)
 ├── caddy/              # Reverse proxy (Caddy)
-├── kan-bot/            # Telegram bot for Kan.bn
+├── xdeca-pm-bot/       # Telegram bot for Kan.bn
 ├── kanbn/              # Kanban boards (Trello alternative)
 ├── outline/            # Team wiki (Notion alternative)
 ├── lightsail/          # AWS Lightsail VPS (primary)
@@ -50,7 +50,7 @@ The Lightsail VPS has limited resources (2GB RAM, 1 vCPU). Running many `docker 
 |---------|------|-----|-------------|
 | Caddy | 80/443 | - | Reverse proxy, auto-TLS |
 | Kan.bn | 3003 | tasks.xdeca.com | Kanban boards (Trello-like) |
-| Kan Bot | - | Telegram | AI task assistant for Kan.bn |
+| xdeca-pm-bot | - | Telegram | AI task assistant for Kan.bn |
 | Outline | 3002 | wiki.xdeca.com | Team wiki (Notion-like) |
 | MinIO | 9000 | storage.xdeca.com | S3-compatible file storage |
 
@@ -94,7 +94,7 @@ Each service has its own `docker-compose.yml` and isolated network. Caddy uses `
 
 
 ┌─────────────────────────────────────────────────────────────────────┐
-│                         Kan Bot (standalone)                        │
+│                      xdeca-pm-bot (standalone)                       │
 │                                                                     │
 │  ┌──────────┐    HTTP API     ┌──────────┐    Telegram    ┌──────┐ │
 │  │  SQLite  │◄───────────────►│  Bot     │◄──────────────►│Users │ │
@@ -110,7 +110,7 @@ Each service has its own `docker-compose.yml` and isolated network. Caddy uses `
 **Network isolation:**
 - `outline/` - own network with postgres, redis, minio
 - `kanbn/` - own network with postgres; uses shared MinIO via `storage.xdeca.com`
-- `kan-bot/` - no docker network; talks to Kan.bn via public API, Telegram via polling
+- `xdeca-pm-bot/` - no docker network; talks to Kan.bn via public API, Telegram via polling
 - `caddy/` - `network_mode: host` to bind 80/443 directly
 
 **Shared resources:**
@@ -279,11 +279,11 @@ First user to sign up becomes admin.
 
 ---
 
-# kan-bot
+# xdeca-pm-bot
 
 Telegram bot for Kan.bn task management. Uses Claude AI for natural language interaction.
 
-**Source**: [10xdeca/kan-bot](https://github.com/10xdeca/kan-bot)
+**Source**: [10xdeca/xdeca-pm-bot](https://github.com/10xdeca/xdeca-pm-bot)
 
 ## Features
 
@@ -305,9 +305,9 @@ Telegram bot for Kan.bn task management. Uses Claude AI for natural language int
 ## Setup
 
 ```bash
-# Deploy (source from https://github.com/10xdeca/kan-bot)
-./scripts/deploy-to.sh 13.54.159.183 kan-bot
+# Deploy (source from https://github.com/10xdeca/xdeca-pm-bot)
+./scripts/deploy-to.sh 13.54.159.183 xdeca-pm-bot
 
 # Check logs
-ssh 13.54.159.183 'docker logs -f kan-bot'
+ssh 13.54.159.183 'docker logs -f xdeca-pm-bot'
 ```

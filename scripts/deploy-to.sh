@@ -220,53 +220,53 @@ WEBHOOK_SECRET=\(.webhook_secret)"' > "$REPO_ROOT/kanbn/.env"
     echo "  Note: First user to sign up becomes admin"
 }
 
-deploy_kan_bot() {
-    echo "Deploying Kan Bot (Telegram)..."
+deploy_pm_bot() {
+    echo "Deploying xdeca-pm-bot (Telegram)..."
 
-    local KAN_BOT_SECRETS="$REPO_ROOT/kan-bot/secrets.yaml"
-    local KAN_BOT_SRC="$REPO_ROOT/../telegram-bots/xdeca-pm-bot"
+    local PM_BOT_SECRETS="$REPO_ROOT/xdeca-pm-bot/secrets.yaml"
+    local PM_BOT_SRC="$REPO_ROOT/../telegram-bots/xdeca-pm-bot"
 
     # Check for secrets file
-    if [ ! -f "$KAN_BOT_SECRETS" ]; then
-        echo "ERROR: kan-bot/secrets.yaml not found"
-        echo "Create it from secrets.yaml.example and encrypt with: sops -e -i kan-bot/secrets.yaml"
+    if [ ! -f "$PM_BOT_SECRETS" ]; then
+        echo "ERROR: xdeca-pm-bot/secrets.yaml not found"
+        echo "Create it from secrets.yaml.example and encrypt with: sops -e -i xdeca-pm-bot/secrets.yaml"
         return 1
     fi
 
     # Check for source code
-    if [ ! -d "$KAN_BOT_SRC" ]; then
-        echo "ERROR: kan-bot source not found at $KAN_BOT_SRC"
+    if [ ! -d "$PM_BOT_SRC" ]; then
+        echo "ERROR: xdeca-pm-bot source not found at $PM_BOT_SRC"
         return 1
     fi
 
     # Generate .env from encrypted secrets
     echo "Generating .env from encrypted secrets..."
-    sops -d "$KAN_BOT_SECRETS" | yq -r '"# Kan Bot Configuration (auto-generated from secrets.yaml)
+    sops -d "$PM_BOT_SECRETS" | yq -r '"# xdeca-pm-bot Configuration (auto-generated from secrets.yaml)
 TELEGRAM_BOT_TOKEN=\(.telegram_bot_token)
 KAN_SERVICE_API_KEY=\(.kan_service_api_key)
 ANTHROPIC_API_KEY=\(.anthropic_api_key)
 KAN_BASE_URL=\(.kan_base_url)
 SPRINT_START_DATE=\(.sprint_start_date)
 REMINDER_INTERVAL_HOURS=\(.reminder_interval_hours)
-ADMIN_USER_IDS=\(.admin_user_ids)"' > "$REPO_ROOT/kan-bot/.env"
+ADMIN_USER_IDS=\(.admin_user_ids)"' > "$REPO_ROOT/xdeca-pm-bot/.env"
 
     # Deploy files
-    ssh "$REMOTE" "mkdir -p ~/apps/kan-bot/src"
+    ssh "$REMOTE" "mkdir -p ~/apps/xdeca-pm-bot/src"
 
     # Copy docker compose and .env
-    rsync -avz --exclude 'secrets.yaml' "$REPO_ROOT/kan-bot/" "$REMOTE":~/apps/kan-bot/
+    rsync -avz --exclude 'secrets.yaml' "$REPO_ROOT/xdeca-pm-bot/" "$REMOTE":~/apps/xdeca-pm-bot/
 
     # Copy source code
-    rsync -avz --exclude 'node_modules' --exclude 'dist' --exclude '.env' --exclude 'data' "$KAN_BOT_SRC/" "$REMOTE":~/apps/kan-bot/src/
+    rsync -avz --exclude 'node_modules' --exclude 'dist' --exclude '.env' --exclude 'data' "$PM_BOT_SRC/" "$REMOTE":~/apps/xdeca-pm-bot/src/
 
     # Clean up local .env
-    rm -f "$REPO_ROOT/kan-bot/.env"
+    rm -f "$REPO_ROOT/xdeca-pm-bot/.env"
 
     # Build and start
-    ssh "$REMOTE" "cd ~/apps/kan-bot && DOCKER_BUILDKIT=1 docker compose build --pull && docker compose up -d"
+    ssh "$REMOTE" "cd ~/apps/xdeca-pm-bot && DOCKER_BUILDKIT=1 docker compose build --pull && docker compose up -d"
 
-    echo "Kan Bot deployed!"
-    echo "  Check logs: ssh $REMOTE 'docker logs -f kan-bot'"
+    echo "xdeca-pm-bot deployed!"
+    echo "  Check logs: ssh $REMOTE 'docker logs -f xdeca-pm-bot'"
 }
 
 case $SERVICE in
@@ -276,7 +276,7 @@ case $SERVICE in
         deploy_service caddy
         deploy_outline
         deploy_kanbn
-        deploy_kan_bot
+        deploy_pm_bot
         ;;
     scripts)
         deploy_scripts
@@ -293,12 +293,12 @@ case $SERVICE in
     kanbn|tasks)
         deploy_kanbn
         ;;
-    kan-bot|telegram)
-        deploy_kan_bot
+    xdeca-pm-bot|pm-bot|telegram)
+        deploy_pm_bot
         ;;
     *)
         echo "Unknown service: $SERVICE"
-        echo "Usage: $0 <ip> [all|caddy|outline|kanbn|kan-bot|backups|scripts]"
+        echo "Usage: $0 <ip> [all|caddy|outline|kanbn|xdeca-pm-bot|backups|scripts]"
         exit 1
         ;;
 esac

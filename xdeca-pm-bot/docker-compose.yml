@@ -1,9 +1,9 @@
 services:
-  kan-bot:
+  xdeca-pm-bot:
     build:
       context: ./src
       dockerfile: Dockerfile
-    container_name: kan-bot
+    container_name: xdeca-pm-bot
     restart: unless-stopped
     environment:
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
@@ -14,7 +14,7 @@ services:
       - REMINDER_INTERVAL_HOURS=${REMINDER_INTERVAL_HOURS:-1}
       - ADMIN_USER_IDS=${ADMIN_USER_IDS}
     volumes:
-      - kan_bot_data:/app/data
+      - xdeca_pm_bot_data:/app/data
 
 volumes:
-  kan_bot_data:
+  xdeca_pm_bot_data:
