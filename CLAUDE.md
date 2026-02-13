@@ -12,7 +12,7 @@ The GCE instance has moderate resources (4GB RAM, 2 vCPU) but running many `dock
 - Set up a local dev environment to debug issues
 - Use `./scripts/deploy-to.sh` for deployments (tested, safe)
 - If you must debug production, run commands sparingly with pauses between them
-- To recover a crashed server: `gcloud compute instances reset xdeca --zone=australia-southeast1-a`
+- To recover a crashed server: `gcloud compute instances reset xdeca-infra --zone=australia-southeast1-a`
 
 ## Structure
 
