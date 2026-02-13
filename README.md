@@ -7,16 +7,15 @@ Infrastructure monorepo for self-hosted services.
 | Service | Description | URL |
 |---------|-------------|-----|
 | [Kan.bn](./kanbn/) | Kanban boards (Trello alternative) | tasks.xdeca.com |
-| [Outline](./outline/) | Team wiki (Notion alternative) | wiki.xdeca.com |
+| [Outline](./outline/) | Team wiki (Notion alternative) | kb.xdeca.com |
 | MinIO | S3-compatible file storage | storage.xdeca.com |
 | [Caddy](./caddy/) | Reverse proxy with automatic HTTPS | - |
 
 ## Infrastructure
 
-| Provider | Directory | Status | Cost |
-|----------|-----------|--------|------|
-| AWS Lightsail | [lightsail](./lightsail/) | **Active** | ~$12/mo |
-| Oracle Cloud | [oci-vps](./oci-vps/) | Pending | Free |
+| Provider | Status | Cost |
+|----------|--------|------|
+| GCP Compute Engine (e2-medium) | **Active** | ~$24/mo |
 
 ## Architecture
 
@@ -31,7 +30,7 @@ Internet → Caddy (443/80) → Kan.bn (3003)
 ### Prerequisites
 
 ```bash
-brew install terraform sops age yq
+brew install sops age yq
 ```
 
 ### 1. Set up encryption key
@@ -45,7 +44,7 @@ age-keygen -o ~/.config/sops/age/keys.txt
 ### 2. Deploy services
 
 ```bash
-./scripts/deploy-to.sh 13.54.159.183 all
+./scripts/deploy-to.sh 34.116.110.7 all
 ```
 
 ## Repository Structure
@@ -55,7 +54,6 @@ age-keygen -o ~/.config/sops/age/keys.txt
 ├── caddy/                  # Reverse proxy config
 ├── kanbn/                  # Kan.bn (Trello alternative)
 ├── outline/                # Outline wiki
-├── lightsail/              # AWS Lightsail VPS
 ├── backups/                # Backup configuration
 ├── scripts/
 │   ├── deploy-to.sh        # Deployment script

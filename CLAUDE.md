@@ -4,26 +4,25 @@ Monorepo for xdeca infrastructure and self-hosted services.
 
 ## IMPORTANT: Production Server Safety
 
-**DO NOT run repeated/rapid commands on the production server (13.54.159.183).**
+**DO NOT run repeated/rapid commands on the production server (34.116.110.7).**
 
-The Lightsail VPS has limited resources (2GB RAM, 1 vCPU). Running many `docker exec`, `docker logs`, or SSH commands in quick succession can cause resource exhaustion and crash the server.
+The GCE instance has moderate resources (4GB RAM, 2 vCPU) but running many `docker exec`, `docker logs`, or SSH commands in quick succession can still cause issues.
 
 **Instead:**
 - Set up a local dev environment to debug issues
 - Use `./scripts/deploy-to.sh` for deployments (tested, safe)
 - If you must debug production, run commands sparingly with pauses between them
-- To recover a crashed server: `aws lightsail stop-instance --instance-name xdeca --region ap-southeast-2` then `start-instance`
+- To recover a crashed server: `gcloud compute instances reset xdeca --zone=australia-southeast1-a`
 
 ## Structure
 
 ```
 .
-├── backups/            # Backup config (AWS S3)
+├── backups/            # Backup config (Google Cloud Storage)
 ├── caddy/              # Reverse proxy (Caddy)
 ├── xdeca-pm-bot/       # Telegram bot for Kan.bn
 ├── kanbn/              # Kanban boards (Trello alternative)
 ├── outline/            # Team wiki (Notion alternative)
-├── lightsail/          # AWS Lightsail VPS (primary)
 ├── scripts/            # Deployment & backup scripts
 └── .sops.yaml          # SOPS encryption config
 ```
@@ -36,7 +35,6 @@ The Lightsail VPS has limited resources (2GB RAM, 1 vCPU). Running many `docker 
 - Dismisses stale reviews on new commits
 
 **CI checks (`.github/workflows/ci.yml`):**
-- Terraform fmt + validate (lightsail, oci-vps/terraform)
 - ShellCheck for all bash scripts
 - yamllint for docker-compose and workflow files
 
@@ -51,7 +49,7 @@ The Lightsail VPS has limited resources (2GB RAM, 1 vCPU). Running many `docker 
 | Caddy | 80/443 | - | Reverse proxy, auto-TLS |
 | Kan.bn | 3003 | tasks.xdeca.com | Kanban boards (Trello-like) |
 | xdeca-pm-bot | - | Telegram | AI task assistant for Kan.bn |
-| Outline | 3002 | wiki.xdeca.com | Team wiki (Notion-like) |
+| Outline | 3002 | kb.xdeca.com | Team wiki (Notion-like) |
 | MinIO | 9000 | storage.xdeca.com | S3-compatible file storage |
 
 ## Container Architecture
@@ -70,7 +68,7 @@ Each service has its own `docker-compose.yml` and isolated network. Caddy uses `
          │                           │                           │
          ▼                           ▼                           ▼
 ┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐
-│ wiki.xdeca.com  │       │tasks.xdeca.com  │       │storage.xdeca.com│
+│  kb.xdeca.com   │       │tasks.xdeca.com  │       │storage.xdeca.com│
 │   :3002         │       │   :3003         │       │   :9000         │
 └────────┬────────┘       └────────┬────────┘       └────────┬────────┘
          │                         │                         │
@@ -119,7 +117,7 @@ Each service has its own `docker-compose.yml` and isolated network. Caddy uses `
 
 ## Backups
 
-Daily backups to AWS S3.
+Daily backups to Google Cloud Storage.
 
 | Service | Schedule | Retention |
 |---------|----------|-----------|
@@ -133,12 +131,11 @@ Daily backups to AWS S3.
 /opt/scripts/restore.sh outline # Restore Outline
 ```
 
-## Cloud Providers
+## Cloud Provider
 
 | Provider | Status | IP | Cost |
 |----------|--------|-----|------|
-| [lightsail](./lightsail/) | Active | 13.54.159.183 | ~$12/mo |
-| [oci-vps](./oci-vps/) | Pending | - | Free tier |
+| GCP Compute Engine (e2-medium) | Active | 34.116.110.7 | ~$24/mo |
 
 ## Secrets Management
 
@@ -153,30 +150,6 @@ age-keygen -o ~/.config/sops/age/keys.txt
 # Edit encrypted secrets
 sops kanbn/secrets.yaml
 sops outline/secrets.yaml
-```
-
----
-
-# lightsail
-
-AWS Lightsail VPS - primary production server.
-
-## Specs
-
-- **CPU**: 1 vCPU
-- **RAM**: 2GB
-- **Storage**: 60GB SSD
-- **Region**: Sydney (ap-southeast-2)
-- **Cost**: ~$12/mo
-
-## Quick Start
-
-```bash
-cd lightsail
-make init
-make apply
-make ssh
-make deploy   # Deploy all services
 ```
 
 ---
@@ -197,7 +170,7 @@ Internet → Caddy (443/80) → Kan.bn (3003)
 
 Self-hosted team wiki (Notion alternative). Real-time collaboration with edit history.
 
-**URL**: https://wiki.xdeca.com
+**URL**: https://kb.xdeca.com
 
 ## Features
 
@@ -211,7 +184,7 @@ Self-hosted team wiki (Notion alternative). Real-time collaboration with edit hi
 
 ```bash
 # Deploy (secrets auto-decrypted)
-./scripts/deploy-to.sh 13.54.159.183 outline
+./scripts/deploy-to.sh 34.116.110.7 outline
 ```
 
 First user to sign up becomes admin. Invite team members from Settings → Members.
@@ -272,7 +245,7 @@ Kan.bn has built-in Trello import via OAuth. To import:
 
 ```bash
 # Deploy (builds from source, secrets auto-decrypted)
-./scripts/deploy-to.sh 13.54.159.183 kanbn
+./scripts/deploy-to.sh 34.116.110.7 kanbn
 ```
 
 First user to sign up becomes admin.
@@ -306,8 +279,8 @@ Telegram bot for Kan.bn task management. Uses Claude AI for natural language int
 
 ```bash
 # Deploy (source from https://github.com/10xdeca/xdeca-pm-bot)
-./scripts/deploy-to.sh 13.54.159.183 xdeca-pm-bot
+./scripts/deploy-to.sh 34.116.110.7 xdeca-pm-bot
 
 # Check logs
-ssh 13.54.159.183 'docker logs -f xdeca-pm-bot'
+ssh 34.116.110.7 'docker logs -f xdeca-pm-bot'
 ```

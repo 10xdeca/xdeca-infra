@@ -61,33 +61,26 @@ deploy_backups() {
         return 0
     fi
 
-    # Decrypt and extract S3 config
-    echo "Extracting S3 configuration..."
-    local S3_REGION
-    local S3_BUCKET
-    S3_REGION=$(sops -d "$BACKUP_SECRETS" | yq -r '.s3_region')
-    S3_BUCKET=$(sops -d "$BACKUP_SECRETS" | yq -r '.s3_bucket')
+    # Decrypt and extract GCS config
+    echo "Extracting GCS configuration..."
+    local GCS_BUCKET
+    local GCS_PROJECT
+    GCS_BUCKET=$(sops -d "$BACKUP_SECRETS" | yq -r '.gcs_bucket')
+    GCS_PROJECT=$(sops -d "$BACKUP_SECRETS" | yq -r '.gcs_project')
 
-    if [ -z "$S3_REGION" ] || [ "$S3_REGION" = "null" ]; then
+    if [ -z "$GCS_BUCKET" ] || [ "$GCS_BUCKET" = "null" ]; then
         echo "ERROR: Invalid backup secrets. Check backups/secrets.yaml"
         return 1
     fi
 
-    # Copy AWS credentials to remote server
-    echo "Deploying AWS credentials..."
-    ssh "$REMOTE" "mkdir -p ~/.aws"
-    scp ~/.aws/credentials "$REMOTE":~/.aws/credentials 2>/dev/null || true
-    scp ~/.aws/config "$REMOTE":~/.aws/config 2>/dev/null || true
-    ssh "$REMOTE" "chmod 600 ~/.aws/*"
-
-    # Generate rclone config for AWS S3
-    echo "Generating rclone configuration (AWS S3)..."
+    # Generate rclone config for Google Cloud Storage
+    # Uses GCE instance service account — no credentials needed
+    echo "Generating rclone configuration (GCS)..."
     cat > /tmp/rclone.conf << EOF
-[s3]
-type = s3
-provider = AWS
-region = $S3_REGION
-env_auth = true
+[gcs]
+type = google cloud storage
+project_number = $GCS_PROJECT
+bucket_policy_only = true
 EOF
 
     # Deploy rclone config
@@ -96,9 +89,9 @@ EOF
     ssh "$REMOTE" "chmod 600 ~/.config/rclone/rclone.conf"
     rm /tmp/rclone.conf
 
-    # Create S3 bucket if it doesn't exist
-    echo "Ensuring S3 bucket exists..."
-    ssh "$REMOTE" "aws s3 mb s3://$S3_BUCKET --region $S3_REGION 2>/dev/null || true"
+    # Create GCS bucket if it doesn't exist
+    echo "Ensuring GCS bucket exists..."
+    ssh "$REMOTE" "rclone mkdir gcs:$GCS_BUCKET 2>/dev/null || true"
 
     # Deploy backup scripts
     echo "Deploying backup scripts..."
@@ -111,10 +104,10 @@ EOF
 
     # Test rclone connection
     echo "Testing rclone connection..."
-    if ssh "$REMOTE" "rclone lsd s3: 2>/dev/null"; then
+    if ssh "$REMOTE" "rclone lsd gcs: 2>/dev/null"; then
         echo "rclone connection successful!"
     else
-        echo "Connection test failed - check AWS credentials"
+        echo "Connection test failed - check GCE service account permissions"
     fi
 
     # Verify backup cron exists
@@ -160,8 +153,7 @@ SSHEOF'
     echo ""
 
     echo "Backup configuration complete!"
-    echo "  - AWS credentials: ~/.aws/"
-    echo "  - rclone config: ~/.config/rclone/rclone.conf"
+    echo "  - rclone config: ~/.config/rclone/rclone.conf (GCS via service account)"
     echo "  - GitHub backup: 10xdeca/xdeca-backups (private repo)"
     echo "  - Deploy key: ~/.ssh/xdeca-backups-deploy"
     echo "  - Scripts: /opt/scripts/backup.sh, /opt/scripts/restore.sh"
@@ -218,7 +210,7 @@ SMTP_SECURE=\(.smtp_secure)"' > "$REPO_ROOT/outline/.env"
     ssh "$REMOTE" "cd ~/apps/outline && docker compose pull && docker compose up -d"
 
     echo "Outline deployed!"
-    echo "  URL: https://wiki.xdeca.com"
+    echo "  URL: https://kb.xdeca.com"
     echo "  Note: First user to sign in becomes admin"
 }
 

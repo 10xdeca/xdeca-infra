@@ -1,6 +1,6 @@
 #!/bin/bash
 # Restore script for all services
-# Restores from AWS S3 via rclone
+# Restores from Google Cloud Storage via rclone
 # Usage: ./restore.sh <service> [date]
 #   service: kanbn, outline
 #   date: YYYY-MM-DD (optional, defaults to latest)
@@ -10,7 +10,7 @@ set -e
 SERVICE=$1
 DATE=${2:-""}
 RESTORE_DIR="/tmp/restore"
-RCLONE_REMOTE="s3"
+RCLONE_REMOTE="gcs"
 BUCKET="xdeca-backups"
 
 RED='\033[0;31m'
@@ -60,7 +60,7 @@ restore_kanbn() {
   log "Restoring from: $BACKUP_FILE"
 
   # Download backup
-  log "Downloading backup from S3..."
+  log "Downloading backup from GCS..."
   rclone copy "$RCLONE_REMOTE:$BUCKET/kanbn/$BACKUP_FILE" "$RESTORE_DIR/"
 
   # Ensure Kan.bn postgres is running
@@ -106,7 +106,7 @@ restore_outline() {
   log "Restoring from: $BACKUP_FILE"
 
   # Download backup
-  log "Downloading backup from S3..."
+  log "Downloading backup from GCS..."
   rclone copy "$RCLONE_REMOTE:$BUCKET/outline/$BACKUP_FILE" "$RESTORE_DIR/"
 
   # Ensure Outline postgres is running

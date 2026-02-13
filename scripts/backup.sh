@@ -1,6 +1,6 @@
 #!/bin/bash
 # Unified backup script for all services
-# Backs up to AWS S3 via rclone + redundant copies to GitHub
+# Backs up to Google Cloud Storage via rclone + redundant copies to GitHub
 # Usage: ./backup.sh [all|kanbn|outline]
 
 set -e
@@ -8,7 +8,7 @@ set -e
 SERVICE=${1:-all}
 BACKUP_DIR="/tmp/backups"
 DATE=$(date +%Y-%m-%d)
-RCLONE_REMOTE="s3"
+RCLONE_REMOTE="gcs"
 BUCKET="xdeca-backups"
 RETENTION_DAYS=7
 
