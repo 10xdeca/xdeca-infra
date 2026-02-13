@@ -3,5 +3,5 @@
 
 creation_rules:
   # Match secret yaml files in service and provider directories
-  - path_regex: (lightsail|oci-vps|backups|outline|kanbn|xdeca-pm-bot)/.*\.yaml$
+  - path_regex: (backups|outline|kanbn|xdeca-pm-bot)/.*\.yaml$
     age: age1mkelwyppmll44ehjnarunmtamcxpee7jljyl475mlvxma7dm4f3q6lnmks

@@ -1,6 +1,6 @@
 # Backups
 
-Automated backups to AWS S3.
+Automated backups to Google Cloud Storage.
 
 ## Overview
 
@@ -27,7 +27,7 @@ sops -e -i secrets.yaml
 ```
 
 This will:
-- Deploy AWS credentials and rclone config
+- Deploy rclone config (GCS via GCE service account)
 - Create the backup bucket (if it doesn't exist)
 - Deploy backup/restore scripts
 - Set up daily cron job
@@ -37,16 +37,16 @@ This will:
 ### Run Backup
 
 ```bash
-ssh ubuntu@13.54.159.183
+ssh ubuntu@34.116.110.7
 /opt/scripts/backup.sh all
 ```
 
 ### List Remote Backups
 
 ```bash
-rclone ls s3:xdeca-backups/
-rclone ls s3:xdeca-backups/kanbn/
-rclone ls s3:xdeca-backups/outline/
+rclone ls gcs:xdeca-backups/
+rclone ls gcs:xdeca-backups/kanbn/
+rclone ls gcs:xdeca-backups/outline/
 ```
 
 ### Restore
@@ -67,6 +67,6 @@ See `docs/backups.md` for full restore procedures.
 
 | File | Purpose |
 |------|---------|
-| `secrets.yaml` | AWS S3 credentials (encrypted) |
+| `secrets.yaml` | GCS configuration (encrypted) |
 | `scripts/backup.sh` | Backup script |
 | `scripts/restore.sh` | Restore script |

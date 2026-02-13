@@ -1,7 +1,7 @@
 # Copy to Caddyfile and update domains
 # Caddy automatically handles HTTPS via Let's Encrypt
 
-wiki.xdeca.com {
+kb.xdeca.com {
     reverse_proxy localhost:3002
 }
 
