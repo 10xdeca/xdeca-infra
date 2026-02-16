@@ -9,3 +9,7 @@ storage.xdeca.com {
 tasks.xdeca.com {
     reverse_proxy localhost:3003
 }
+
+dav.xdeca.com {
+    reverse_proxy localhost:5232
+}

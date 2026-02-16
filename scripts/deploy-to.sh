@@ -1,7 +1,7 @@
 #!/bin/bash
 # Deploy services to any VPS
 # Usage: ./scripts/deploy-to.sh <ip> [service]
-# Services: all, caddy, outline, kanbn, backups, scripts
+# Services: all, caddy, outline, kanbn, radicale, backups, scripts
 
 set -e
 
@@ -11,7 +11,7 @@ export SOPS_AGE_KEY_FILE="${SOPS_AGE_KEY_FILE:-$HOME/.config/sops/age/keys.txt}"
 if [ -z "$1" ]; then
   echo "Usage: $0 <ip> [service]"
   echo "  ip: VPS IP address or hostname"
-  echo "  service: all|caddy|outline|kanbn|backups|scripts (default: all)"
+  echo "  service: all|caddy|outline|kanbn|radicale|backups|scripts (default: all)"
   exit 1
 fi
 
@@ -322,6 +322,37 @@ ADMIN_USER_IDS=\(.admin_user_ids)"' > "$REPO_ROOT/xdeca-pm-bot/.env"
     echo "  Check logs: ssh $REMOTE 'docker logs -f xdeca-pm-bot'"
 }
 
+deploy_radicale() {
+    echo "Deploying Radicale (CalDAV/CardDAV)..."
+
+    local RADICALE_SECRETS="$REPO_ROOT/radicale/secrets.yaml"
+
+    # Check for secrets file
+    if [ ! -f "$RADICALE_SECRETS" ]; then
+        echo "ERROR: radicale/secrets.yaml not found"
+        echo "Create it from secrets.yaml.example and encrypt with: sops -e -i radicale/secrets.yaml"
+        return 1
+    fi
+
+    # Generate htpasswd users file from encrypted secrets
+    echo "Generating htpasswd users file from encrypted secrets..."
+    sops -d "$RADICALE_SECRETS" | yq -r '.htpasswd_users' > "$REPO_ROOT/radicale/config/users"
+
+    # Deploy files
+    ssh "$REMOTE" "mkdir -p ~/apps/radicale"
+    rsync -avz --delete --exclude 'secrets.yaml' "$REPO_ROOT/radicale/" "$REMOTE":~/apps/radicale/
+
+    # Clean up local users file
+    rm -f "$REPO_ROOT/radicale/config/users"
+
+    # Start Radicale
+    ssh "$REMOTE" "cd ~/apps/radicale && docker compose pull && docker compose up -d"
+
+    echo "Radicale deployed!"
+    echo "  URL: https://dav.xdeca.com"
+    echo "  Test: curl -u user:pass https://dav.xdeca.com/.well-known/caldav"
+}
+
 case $SERVICE in
     all)
         deploy_scripts
@@ -329,6 +360,7 @@ case $SERVICE in
         deploy_service caddy
         deploy_outline
         deploy_kanbn
+        deploy_radicale
         deploy_pm_bot
         ;;
     scripts)
@@ -346,12 +378,15 @@ case $SERVICE in
     kanbn|tasks)
         deploy_kanbn
         ;;
+    radicale|dav)
+        deploy_radicale
+        ;;
     xdeca-pm-bot|pm-bot|telegram)
         deploy_pm_bot
         ;;
     *)
         echo "Unknown service: $SERVICE"
-        echo "Usage: $0 <ip> [all|caddy|outline|kanbn|xdeca-pm-bot|backups|scripts]"
+        echo "Usage: $0 <ip> [all|caddy|outline|kanbn|radicale|xdeca-pm-bot|backups|scripts]"
         exit 1
         ;;
 esac

@@ -2,7 +2,7 @@
 # Restore script for all services
 # Restores from Google Cloud Storage via rclone
 # Usage: ./restore.sh <service> [date]
-#   service: kanbn, outline
+#   service: kanbn, outline, radicale
 #   date: YYYY-MM-DD (optional, defaults to latest)
 
 set -e
@@ -24,7 +24,7 @@ error() { echo -e "${RED}[$(date '+%Y-%m-%d %H:%M:%S')] ERROR:${NC} $1" >&2; }
 
 if [ -z "$SERVICE" ]; then
   echo "Usage: $0 <service> [date]"
-  echo "  service: kanbn, outline"
+  echo "  service: kanbn, outline, radicale"
   echo "  date: YYYY-MM-DD (optional)"
   echo ""
   echo "Examples:"
@@ -169,6 +169,48 @@ restore_pm_bot() {
   log "xdeca-pm-bot restore complete!"
 }
 
+restore_radicale() {
+  log "Restoring Radicale..."
+
+  # Find backup file
+  if [ -n "$DATE" ]; then
+    BACKUP_FILE="radicale-$DATE.tar.gz"
+  else
+    BACKUP_FILE=$(rclone ls "$RCLONE_REMOTE:$BUCKET/radicale/" | sort -r | head -1 | awk '{print $2}')
+  fi
+
+  if [ -z "$BACKUP_FILE" ]; then
+    error "No backup found"
+    list_backups radicale
+    exit 1
+  fi
+
+  log "Restoring from: $BACKUP_FILE"
+
+  # Download backup
+  log "Downloading backup from GCS..."
+  rclone copy "$RCLONE_REMOTE:$BUCKET/radicale/$BACKUP_FILE" "$RESTORE_DIR/"
+
+  # Stop Radicale
+  log "Stopping Radicale..."
+  cd ~/apps/radicale
+  docker compose stop radicale
+
+  # Restore collections into the volume
+  log "Restoring collections..."
+  docker compose run --rm -v "$RESTORE_DIR/$BACKUP_FILE:/restore.tar.gz:ro" radicale \
+    sh -c "rm -rf /data/collections && tar xzf /restore.tar.gz -C /"
+
+  # Start Radicale
+  log "Starting Radicale..."
+  docker compose up -d
+
+  # Cleanup
+  rm -f "$RESTORE_DIR/$BACKUP_FILE"
+
+  log "Radicale restore complete!"
+}
+
 # Run restore
 case $SERVICE in
   kanbn)
@@ -176,6 +218,9 @@ case $SERVICE in
     ;;
   outline)
     restore_outline
+    ;;
+  radicale)
+    restore_radicale
     ;;
   pm-bot)
     restore_pm_bot
@@ -185,7 +230,7 @@ case $SERVICE in
     ;;
   *)
     error "Unknown service: $SERVICE"
-    echo "Valid services: kanbn, outline, pm-bot, list"
+    echo "Valid services: kanbn, outline, radicale, pm-bot, list"
     exit 1
     ;;
 esac

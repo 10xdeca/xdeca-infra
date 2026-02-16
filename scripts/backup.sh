@@ -1,7 +1,7 @@
 #!/bin/bash
 # Unified backup script for all services
 # Backs up to Google Cloud Storage via rclone + redundant copies to GitHub
-# Usage: ./backup.sh [all|kanbn|outline]
+# Usage: ./backup.sh [all|kanbn|outline|radicale]
 
 set -e
 
@@ -74,6 +74,20 @@ backup_outline() {
   rclone copy "$backup_file" "$RCLONE_REMOTE:$BUCKET/outline/"
 
   log "Outline backup complete: outline-$DATE.sql.gz"
+}
+
+backup_radicale() {
+  log "Backing up Radicale..."
+
+  local backup_file="$BACKUP_DIR/radicale-$DATE.tar.gz"
+
+  # Tar the collections from the Docker volume
+  docker exec radicale tar czf - /data/collections > "$backup_file"
+
+  # Upload to object storage
+  rclone copy "$backup_file" "$RCLONE_REMOTE:$BUCKET/radicale/"
+
+  log "Radicale backup complete: radicale-$DATE.tar.gz"
 }
 
 backup_to_github() {
@@ -149,6 +163,8 @@ cleanup_old_backups() {
     --min-age "${RETENTION_DAYS}d" 2>/dev/null || true
   rclone delete "$RCLONE_REMOTE:$BUCKET/pm-bot/" \
     --min-age "${RETENTION_DAYS}d" 2>/dev/null || true
+  rclone delete "$RCLONE_REMOTE:$BUCKET/radicale/" \
+    --min-age "${RETENTION_DAYS}d" 2>/dev/null || true
 
   log "Cleanup complete"
 }
@@ -158,6 +174,7 @@ case $SERVICE in
   all)
     backup_kanbn
     backup_outline
+    backup_radicale
     backup_pm_bot
     backup_to_github kanbn outline
     cleanup_old_backups
@@ -170,6 +187,9 @@ case $SERVICE in
     backup_outline
     backup_to_github outline
     ;;
+  radicale)
+    backup_radicale
+    ;;
   pm-bot)
     backup_pm_bot
     ;;
@@ -177,7 +197,7 @@ case $SERVICE in
     cleanup_old_backups
     ;;
   *)
-    echo "Usage: $0 [all|kanbn|outline|pm-bot|cleanup]"
+    echo "Usage: $0 [all|kanbn|outline|radicale|pm-bot|cleanup]"
     exit 1
     ;;
 esac

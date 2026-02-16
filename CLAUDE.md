@@ -20,10 +20,11 @@ The GCE instance has moderate resources (4GB RAM, 2 vCPU) but running many `dock
 .
 ├── backups/            # Backup config (Google Cloud Storage)
 ├── caddy/              # Reverse proxy (Caddy)
-├── xdeca-pm-bot/       # Telegram bot for Kan.bn
 ├── kanbn/              # Kanban boards (Trello alternative)
 ├── outline/            # Team wiki (Notion alternative)
+├── radicale/           # CalDAV/CardDAV server
 ├── scripts/            # Deployment & backup scripts
+├── xdeca-pm-bot/       # Telegram bot for Kan.bn
 └── .sops.yaml          # SOPS encryption config
 ```
 
@@ -51,6 +52,7 @@ The GCE instance has moderate resources (4GB RAM, 2 vCPU) but running many `dock
 | xdeca-pm-bot | - | Telegram | AI task assistant for Kan.bn |
 | Outline | 3002 | kb.xdeca.com | Team wiki (Notion-like) |
 | MinIO | 9000 | storage.xdeca.com | S3-compatible file storage |
+| Radicale | 5232 | dav.xdeca.com | CalDAV/CardDAV (calendar & contacts) |
 
 ## Container Architecture
 
@@ -64,31 +66,30 @@ Each service has its own `docker-compose.yml` and isolated network. Caddy uses `
                            │   80/443 → TLS    │
                            └─────────┬─────────┘
                                      │
-         ┌───────────────────────────┼───────────────────────────┐
-         │                           │                           │
-         ▼                           ▼                           ▼
-┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐
-│  kb.xdeca.com   │       │tasks.xdeca.com  │       │storage.xdeca.com│
-│   :3002         │       │   :3003         │       │   :9000         │
-└────────┬────────┘       └────────┬────────┘       └────────┬────────┘
-         │                         │                         │
-         ▼                         ▼                         │
-┌─────────────────┐       ┌─────────────────┐                │
-│    Outline      │       │     Kan.bn      │                │
-│  (wiki app)     │       │  (kanban app)   │                │
-└────────┬────────┘       └────────┬────────┘                │
-         │                         │                         │
-    ┌────┴────┐               ┌────┴────┐                    │
-    ▼         ▼               ▼         │                    │
-┌───────┐ ┌───────┐     ┌─────────┐     │                    │
-│Postgres│ │ Redis │     │Postgres │     │    ┌──────────────┘
-└───────┘ └───────┘     └─────────┘     │    │
-                                        │    ▼
-                              ┌─────────┴────────┐
-                              │      MinIO       │
-                              │ (shared storage) │
-                              │ outline, kanbn-* │
-                              └──────────────────┘
+         ┌───────────────┬───────────┼───────────┬───────────────┐
+         │               │           │           │               │
+         ▼               ▼           ▼           ▼               ▼
+┌─────────────┐  ┌─────────────┐ ┌────────┐ ┌────────┐  ┌──────────────┐
+│kb.xdeca.com │  │tasks.xdeca  │ │storage │ │dav     │  │              │
+│   :3002     │  │ .com :3003  │ │.xdeca  │ │.xdeca  │  │              │
+└──────┬──────┘  └──────┬──────┘ │.com    │ │.com    │  │              │
+       │                │        │:9000   │ │:5232   │  │              │
+       ▼                ▼        └───┬────┘ └───┬────┘  │              │
+┌─────────────┐  ┌─────────────┐    │           │       │              │
+│   Outline   │  │   Kan.bn    │    │           ▼       │              │
+│ (wiki app)  │  │(kanban app) │    │    ┌───────────┐  │              │
+└──────┬──────┘  └──────┬──────┘    │    │ Radicale  │  │              │
+       │                │           │    │ (CalDAV/  │  │              │
+  ┌────┴────┐      ┌────┴────┐     │    │  CardDAV) │  │              │
+  ▼         ▼      ▼         │     │    └───────────┘  │              │
+┌───────┐┌──────┐┌────────┐  │  ┌──┘                   │              │
+│Postgre││Redis ││Postgres│  │  │                       │              │
+└───────┘└──────┘└────────┘  │  ▼                       │              │
+                       ┌─────┴──────────┐               │              │
+                       │     MinIO      │               │              │
+                       │(shared storage)│               │              │
+                       │outline, kanbn-*│               │              │
+                       └────────────────┘               │              │
 
 
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -108,6 +109,7 @@ Each service has its own `docker-compose.yml` and isolated network. Caddy uses `
 **Network isolation:**
 - `outline/` - own network with postgres, redis, minio
 - `kanbn/` - own network with postgres; uses shared MinIO via `storage.xdeca.com`
+- `radicale/` - standalone container; file-based storage in Docker volume
 - `xdeca-pm-bot/` - no docker network; talks to Kan.bn via public API, Telegram via polling
 - `caddy/` - `network_mode: host` to bind 80/443 directly
 
@@ -123,14 +125,16 @@ Daily backups to Google Cloud Storage.
 |---------|----------|-----------|
 | Kan.bn | 4 AM | 7 days |
 | Outline | 4 AM | 7 days |
+| Radicale | 4 AM | 7 days |
 | xdeca-pm-bot | 4 AM | 7 days |
 
 ```bash
 # Manual commands (run on VPS)
-/opt/scripts/backup.sh all      # Run backup
-/opt/scripts/restore.sh kanbn   # Restore Kan.bn
-/opt/scripts/restore.sh outline # Restore Outline
-/opt/scripts/restore.sh pm-bot  # Restore xdeca-pm-bot
+/opt/scripts/backup.sh all       # Run backup
+/opt/scripts/restore.sh kanbn    # Restore Kan.bn
+/opt/scripts/restore.sh outline  # Restore Outline
+/opt/scripts/restore.sh radicale # Restore Radicale
+/opt/scripts/restore.sh pm-bot   # Restore xdeca-pm-bot
 ```
 
 ## Cloud Provider
@@ -169,6 +173,7 @@ Reverse proxy with automatic HTTPS via Let's Encrypt.
 Internet → Caddy (443/80) → Kan.bn (3003)
                           → Outline (3002)
                           → MinIO Storage (9000)
+                          → Radicale (5232)
 ```
 
 ---
@@ -256,6 +261,43 @@ Kan.bn has built-in Trello import via OAuth. To import:
 ```
 
 First user to sign up becomes admin.
+
+---
+
+# radicale
+
+Self-hosted CalDAV/CardDAV server for team calendars and contacts.
+
+**URL**: https://dav.xdeca.com
+**Image**: [tomsquest/docker-radicale](https://github.com/tomsquest/docker-radicale)
+
+## Features
+
+- CalDAV (calendars) and CardDAV (contacts)
+- htpasswd authentication (bcrypt)
+- Owner-only access rights (users see only their own data)
+- File-based storage with git-tracked changes
+- Compatible with DAVx5, Apple Calendar/Contacts, Thunderbird
+
+## Setup
+
+```bash
+# Deploy (secrets auto-decrypted, htpasswd generated)
+./scripts/deploy-to.sh 34.116.110.7 radicale
+
+# Also redeploy Caddy to pick up the new route
+./scripts/deploy-to.sh 34.116.110.7 caddy
+
+# Test
+curl -u nick:password https://dav.xdeca.com/.well-known/caldav
+```
+
+## Client Configuration
+
+Use base URL `https://dav.xdeca.com` with your username/password in:
+- **Android**: DAVx5
+- **iOS/macOS**: Settings → Calendar/Contacts → Add Account → Other
+- **Thunderbird**: TbSync + DAV provider
 
 ---
 
