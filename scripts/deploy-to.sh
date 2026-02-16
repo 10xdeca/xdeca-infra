@@ -255,18 +255,33 @@ WEBHOOK_SECRET=\(.webhook_secret)"' > "$REPO_ROOT/kanbn/.env"
         return 1
     fi
 
-    # Deploy files
-    ssh "$REMOTE" "mkdir -p ~/apps/kanbn/kan-source"
-    rsync -avz --delete --exclude 'secrets.yaml' "$REPO_ROOT/kanbn/" "$REMOTE":~/apps/kanbn/ --exclude 'kan-source'
-
-    # Copy kan source code
-    rsync -avz --delete --exclude 'node_modules' --exclude '.next' --exclude 'dist' --exclude '.env' --exclude '.git' "$KAN_SRC/" "$REMOTE":~/apps/kanbn/kan-source/
+    # Deploy .env and compose files (not source code)
+    ssh "$REMOTE" "mkdir -p ~/apps/kanbn"
+    rsync -avz --delete --exclude 'secrets.yaml' --exclude 'kan-source' "$REPO_ROOT/kanbn/" "$REMOTE":~/apps/kanbn/
 
     # Clean up local .env
     rm -f "$REPO_ROOT/kanbn/.env"
 
-    # Build and start Kan.bn (builds from local source)
-    ssh "$REMOTE" "cd ~/apps/kanbn && DOCKER_BUILDKIT=1 docker compose build --pull && docker compose up -d"
+    # Build Docker image locally for linux/amd64 (VPS is x86_64)
+    local IMAGE_TAR="/tmp/kanbn-image.tar"
+    echo "Building kanbn image locally for linux/amd64..."
+    docker buildx build \
+        --platform linux/amd64 \
+        -t kanbn:local \
+        -f "$KAN_SRC/apps/web/Dockerfile" \
+        "$KAN_SRC" \
+        --output "type=docker,dest=$IMAGE_TAR"
+
+    # Transfer image to VPS
+    echo "Transferring image to VPS..."
+    rsync -az --progress "$IMAGE_TAR" "$REMOTE":/tmp/kanbn-image.tar
+
+    # Load image and restart container
+    echo "Loading image and restarting container..."
+    ssh "$REMOTE" "docker load < /tmp/kanbn-image.tar && rm /tmp/kanbn-image.tar && cd ~/apps/kanbn && docker compose up -d"
+
+    # Clean up local tar
+    rm -f "$IMAGE_TAR"
 
     echo "Kan.bn deployed!"
     echo "  URL: https://tasks.xdeca.com"

@@ -121,18 +121,22 @@ backup_to_github() {
     }
   fi
 
-  # Copy each service dump
+  # Copy each service dump (auto-detect file extension)
   for svc in "${services[@]}"; do
-    local dump="$BACKUP_DIR/${svc}-${DATE}.sql.gz"
-    local dest="$GITHUB_BACKUP_DIR/${svc}.sql.gz"
+    # Find the backup file regardless of extension (.sql.gz, .tar.gz, .db, etc.)
+    local dump
+    dump=$(find "$BACKUP_DIR" -name "${svc}-${DATE}.*" -type f 2>/dev/null | head -1)
 
-    if [ ! -f "$dump" ]; then
-      error "Dump file not found: $dump"
+    if [ -z "$dump" ] || [ ! -f "$dump" ]; then
+      error "Dump file not found for $svc (expected ${svc}-${DATE}.*)"
       continue
     fi
 
+    local ext="${dump#"$BACKUP_DIR/${svc}-${DATE}"}"
+    local dest="$GITHUB_BACKUP_DIR/${svc}${ext}"
+
     cp "$dump" "$dest"
-    log "Copied $svc backup → ${svc}.sql.gz"
+    log "Copied $svc backup → ${svc}${ext}"
   done
 
   # Commit and push
@@ -176,7 +180,7 @@ case $SERVICE in
     backup_outline
     backup_radicale
     backup_pm_bot
-    backup_to_github kanbn outline
+    backup_to_github kanbn outline radicale pm-bot
     cleanup_old_backups
     ;;
   kanbn)
@@ -189,9 +193,11 @@ case $SERVICE in
     ;;
   radicale)
     backup_radicale
+    backup_to_github radicale
     ;;
   pm-bot)
     backup_pm_bot
+    backup_to_github pm-bot
     ;;
   cleanup)
     cleanup_old_backups
