@@ -267,6 +267,7 @@ WEBHOOK_SECRET=\(.webhook_secret)"' > "$REPO_ROOT/kanbn/.env"
     echo "Building kanbn image locally for linux/amd64..."
     docker buildx build \
         --platform linux/amd64 \
+        --pull \
         -t kanbn:local \
         -f "$KAN_SRC/apps/web/Dockerfile" \
         "$KAN_SRC" \
