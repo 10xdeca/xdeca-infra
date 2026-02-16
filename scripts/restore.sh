@@ -198,8 +198,8 @@ restore_radicale() {
 
   # Restore collections into the volume
   log "Restoring collections..."
-  docker compose run --rm -v "$RESTORE_DIR/$BACKUP_FILE:/restore.tar.gz:ro" radicale \
-    sh -c "rm -rf /data/collections && tar xzf /restore.tar.gz -C /"
+  docker compose run --rm --entrypoint sh -v "$RESTORE_DIR/$BACKUP_FILE:/restore.tar.gz:ro" radicale \
+    -c "rm -rf /data/collections && tar xzf /restore.tar.gz -C /"
 
   # Start Radicale
   log "Starting Radicale..."
