@@ -312,9 +312,11 @@ deploy_pm_bot() {
     echo "Generating .env from encrypted secrets..."
     sops -d "$PM_BOT_SECRETS" | yq -r '"# xdeca-pm-bot Configuration (auto-generated from secrets.yaml)
 TELEGRAM_BOT_TOKEN=\(.telegram_bot_token)
-KAN_SERVICE_API_KEY=\(.kan_service_api_key)
+KAN_API_KEY=\(.kan_api_key // .kan_service_api_key)
 ANTHROPIC_API_KEY=\(.anthropic_api_key)
 KAN_BASE_URL=\(.kan_base_url)
+OUTLINE_API_KEY=\(.outline_api_key // "")
+OUTLINE_BASE_URL=\(.outline_base_url // "https://kb.xdeca.com/api")
 SPRINT_START_DATE=\(.sprint_start_date)
 REMINDER_INTERVAL_HOURS=\(.reminder_interval_hours)
 ADMIN_USER_IDS=\(.admin_user_ids)"' > "$REPO_ROOT/xdeca-pm-bot/.env"
