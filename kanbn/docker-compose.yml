@@ -1,9 +1,6 @@
 services:
   kanbn:
-    build:
-      context: ./kan-source
-      dockerfile: apps/web/Dockerfile
-    image: kanbn:local
+    image: ghcr.io/10xdeca/kan:deploy-combined
     container_name: kanbn
     restart: unless-stopped
     depends_on:
