@@ -313,7 +313,7 @@ deploy_pm_bot() {
     sops -d "$PM_BOT_SECRETS" | yq -r '"# xdeca-pm-bot Configuration (auto-generated from secrets.yaml)
 TELEGRAM_BOT_TOKEN=\(.telegram_bot_token)
 KAN_API_KEY=\(.kan_api_key)
-ANTHROPIC_API_KEY=\(.anthropic_api_key)
+CLAUDE_REFRESH_TOKEN=\(.claude_refresh_token)
 KAN_BASE_URL=\(.kan_base_url)
 OUTLINE_API_KEY=\(.outline_api_key)
 OUTLINE_BASE_URL=\(.outline_base_url)
