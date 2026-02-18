@@ -34,7 +34,7 @@ deploy_scripts() {
         echo "Setting up health check cron..."
         local BOT_TOKEN
         BOT_TOKEN=$(sops -d "$PM_BOT_SECRETS" | yq -r '.telegram_bot_token')
-        ssh "$REMOTE" "echo '0 * * * * ubuntu TELEGRAM_BOT_TOKEN=$BOT_TOKEN TELEGRAM_CHAT_ID=-1003454984262 TELEGRAM_THREAD_ID=1953 /opt/scripts/health-check.sh >> /var/log/health-check.log 2>&1' | sudo tee /etc/cron.d/health-check > /dev/null"
+        ssh "$REMOTE" "mkdir -p ~/logs && echo '0 * * * * ubuntu TELEGRAM_BOT_TOKEN=$BOT_TOKEN TELEGRAM_CHAT_ID=-1003454984262 TELEGRAM_THREAD_ID=1953 /opt/scripts/health-check.sh >> /home/ubuntu/logs/health-check.log 2>&1' | sudo tee /etc/cron.d/health-check > /dev/null"
         echo "Health check cron installed (hourly)"
     else
         echo "WARNING: xdeca-pm-bot/secrets.yaml not found, skipping health check cron"
@@ -110,13 +110,16 @@ EOF
         echo "Connection test failed - check GCE service account permissions"
     fi
 
-    # Verify backup cron exists
-    if ssh "$REMOTE" "grep -q backup.sh /etc/cron.d/backup 2>/dev/null"; then
-        echo "Backup cron job already configured"
-    else
-        echo "Setting up backup cron job..."
-        ssh "$REMOTE" "echo '0 4 * * * ubuntu /opt/scripts/backup.sh all >> /var/log/backup.log 2>&1' | sudo tee /etc/cron.d/backup > /dev/null"
+    # Ensure cron is installed and running
+    if ! ssh "$REMOTE" "systemctl is-active cron > /dev/null 2>&1"; then
+        echo "Installing and starting cron..."
+        ssh "$REMOTE" "sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq cron && sudo systemctl enable --now cron"
     fi
+
+    # Set up backup cron job and log directory
+    echo "Setting up backup cron job..."
+    ssh "$REMOTE" "mkdir -p ~/logs"
+    ssh "$REMOTE" "echo '0 4 * * * ubuntu /opt/scripts/backup.sh all >> /home/ubuntu/logs/backup.log 2>&1' | sudo tee /etc/cron.d/backup > /dev/null"
 
     # --- GitHub backup setup ---
     echo ""

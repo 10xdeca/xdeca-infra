@@ -3,14 +3,13 @@
 # Backs up to Google Cloud Storage via rclone + redundant copies to GitHub
 # Usage: ./backup.sh [all|kanbn|outline|radicale]
 
-set -e
-
 SERVICE=${1:-all}
 BACKUP_DIR="/tmp/backups"
 DATE=$(date +%Y-%m-%d)
 RCLONE_REMOTE="gcs"
 BUCKET="xdeca-backups"
 RETENTION_DAYS=7
+FAILED_SERVICES=()
 
 # GitHub backup config
 GITHUB_BACKUP_REPO="git@github-backups:10xdeca/xdeca-backups.git"
@@ -176,28 +175,31 @@ cleanup_old_backups() {
 # Run backups
 case $SERVICE in
   all)
-    backup_kanbn
-    backup_outline
-    backup_radicale
-    backup_pm_bot
-    backup_to_github kanbn outline radicale pm-bot
+    SUCCEEDED=()
+    for svc in kanbn outline radicale pm-bot; do
+      if "backup_${svc//-/_}"; then
+        SUCCEEDED+=("$svc")
+      else
+        error "$svc backup failed"
+        FAILED_SERVICES+=("$svc")
+      fi
+    done
+    if [ ${#SUCCEEDED[@]} -gt 0 ]; then
+      backup_to_github "${SUCCEEDED[@]}"
+    fi
     cleanup_old_backups
     ;;
   kanbn)
-    backup_kanbn
-    backup_to_github kanbn
+    backup_kanbn && backup_to_github kanbn || FAILED_SERVICES+=(kanbn)
     ;;
   outline)
-    backup_outline
-    backup_to_github outline
+    backup_outline && backup_to_github outline || FAILED_SERVICES+=(outline)
     ;;
   radicale)
-    backup_radicale
-    backup_to_github radicale
+    backup_radicale && backup_to_github radicale || FAILED_SERVICES+=(radicale)
     ;;
   pm-bot)
-    backup_pm_bot
-    backup_to_github pm-bot
+    backup_pm_bot && backup_to_github pm-bot || FAILED_SERVICES+=(pm-bot)
     ;;
   cleanup)
     cleanup_old_backups
@@ -207,5 +209,10 @@ case $SERVICE in
     exit 1
     ;;
 esac
+
+if [ ${#FAILED_SERVICES[@]} -gt 0 ]; then
+  error "Backups failed for: ${FAILED_SERVICES[*]}"
+  exit 1
+fi
 
 log "Backup complete!"
