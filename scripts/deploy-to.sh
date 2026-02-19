@@ -320,6 +320,7 @@ CLAUDE_REFRESH_TOKEN=\(.claude_refresh_token)
 KAN_BASE_URL=\(.kan_base_url)
 OUTLINE_API_KEY=\(.outline_api_key)
 OUTLINE_BASE_URL=\(.outline_base_url)
+RADICALE_PASSWORD=\(.radicale_password)
 SPRINT_START_DATE=\(.sprint_start_date)
 REMINDER_INTERVAL_HOURS=\(.reminder_interval_hours)
 ADMIN_USER_IDS=\(.admin_user_ids)"' > "$REPO_ROOT/xdeca-pm-bot/.env"
