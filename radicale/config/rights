@@ -1,0 +1,23 @@
+# pm-agent can read/write nick's collections
+[pm-agent-access-nick]
+user: pm-agent
+collection: nick/.*
+permissions: rw
+
+# pm-agent can read/write its own collections
+[pm-agent-own]
+user: pm-agent
+collection: pm-agent/.*
+permissions: rw
+
+# Everyone can access their own collections (owner_only equivalent)
+[owner-access]
+user: .+
+collection: {user}/.*
+permissions: rw
+
+# Everyone can create top-level collections under their user
+[owner-toplevel]
+user: .+
+collection: {user}
+permissions: rw

@@ -9,7 +9,8 @@ htpasswd_filename = /config/users
 htpasswd_encryption = bcrypt
 
 [rights]
-type = owner_only
+type = from_file
+file = /config/rights
 
 [storage]
 filesystem_folder = /data/collections
