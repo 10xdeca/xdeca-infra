@@ -1,23 +1,38 @@
-# pm-agent can read/write nick's collections
-[pm-agent-access-nick]
+# Allow all authenticated users to discover via root (CalDAV/CardDAV well-known)
+[root-discovery]
+user: .+
+collection:
+permissions: r
+
+# pm-agent can read/write nick's top-level and sub-collections
+[pm-agent-nick-root]
+user: pm-agent
+collection: nick
+permissions: rw
+
+[pm-agent-nick-children]
 user: pm-agent
 collection: nick/.*
 permissions: rw
 
 # pm-agent can read/write its own collections
-[pm-agent-own]
+[pm-agent-own-root]
+user: pm-agent
+collection: pm-agent
+permissions: rw
+
+[pm-agent-own-children]
 user: pm-agent
 collection: pm-agent/.*
 permissions: rw
 
 # Everyone can access their own collections (owner_only equivalent)
-[owner-access]
-user: .+
-collection: {user}/.*
-permissions: rw
-
-# Everyone can create top-level collections under their user
 [owner-toplevel]
 user: .+
 collection: {user}
+permissions: rw
+
+[owner-children]
+user: .+
+collection: {user}/.*
 permissions: rw
