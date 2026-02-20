@@ -34,7 +34,7 @@ deploy_scripts() {
         echo "Setting up health check cron..."
         local BOT_TOKEN
         BOT_TOKEN=$(sops -d "$PM_BOT_SECRETS" | yq -r '.telegram_bot_token')
-        ssh "$REMOTE" "mkdir -p ~/logs && echo '0 * * * * ubuntu TELEGRAM_BOT_TOKEN=$BOT_TOKEN TELEGRAM_CHAT_ID=-1003454984262 TELEGRAM_THREAD_ID=1953 /opt/scripts/health-check.sh >> /home/ubuntu/logs/health-check.log 2>&1' | sudo tee /etc/cron.d/health-check > /dev/null"
+        ssh "$REMOTE" "mkdir -p ~/logs && echo '0 * * * * ubuntu TELEGRAM_BOT_TOKEN=$BOT_TOKEN TELEGRAM_CHAT_ID=-1002401283379 TELEGRAM_THREAD_ID=101 /opt/scripts/health-check.sh >> /home/ubuntu/logs/health-check.log 2>&1' | sudo tee /etc/cron.d/health-check > /dev/null"
         echo "Health check cron installed (hourly)"
     else
         echo "WARNING: xdeca-pm-bot/secrets.yaml not found, skipping health check cron"
@@ -332,7 +332,7 @@ ADMIN_USER_IDS=\(.admin_user_ids)"' > "$REPO_ROOT/xdeca-pm-bot/.env"
     rsync -avz --exclude 'secrets.yaml' "$REPO_ROOT/xdeca-pm-bot/" "$REMOTE":~/apps/xdeca-pm-bot/
 
     # Copy source code
-    rsync -avz --exclude 'node_modules' --exclude 'dist' --exclude '.env' --exclude 'data' "$PM_BOT_SRC/" "$REMOTE":~/apps/xdeca-pm-bot/src/
+    rsync -avz --delete --exclude 'node_modules' --exclude 'dist' --exclude '.env' --exclude 'data' "$PM_BOT_SRC/" "$REMOTE":~/apps/xdeca-pm-bot/src/
 
     # Clean up local .env
     rm -f "$REPO_ROOT/xdeca-pm-bot/.env"
