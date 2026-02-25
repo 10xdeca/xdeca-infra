@@ -10,6 +10,7 @@ services:
       - BETTER_AUTH_SECRET=${AUTH_SECRET}
       - POSTGRES_URL=postgres://kanbn:${POSTGRES_PASSWORD}@postgres:5432/kanbn
       - NEXT_PUBLIC_ALLOW_CREDENTIALS=true
+      - NEXT_PUBLIC_DISABLE_SIGN_UP=true
       - SMTP_HOST=${SMTP_HOST}
       - SMTP_PORT=${SMTP_PORT}
       - SMTP_USER=${SMTP_USERNAME}

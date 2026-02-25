@@ -296,7 +296,7 @@ deploy_pm_bot() {
     echo "Deploying xdeca-pm-bot (Telegram)..."
 
     local PM_BOT_SECRETS="$REPO_ROOT/xdeca-pm-bot/secrets.yaml"
-    local PM_BOT_SRC="$REPO_ROOT/../telegram-bots/xdeca-pm-bot"
+    local PM_BOT_SRC="$REPO_ROOT/../xdeca-pm-bot"
 
     # Check for secrets file
     if [ ! -f "$PM_BOT_SECRETS" ]; then
