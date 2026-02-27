@@ -19,6 +19,7 @@ services:
       - SPRINT_START_DATE=${SPRINT_START_DATE:-2025-01-05}
       - REMINDER_INTERVAL_HOURS=${REMINDER_INTERVAL_HOURS:-1}
       - ADMIN_USER_IDS=${ADMIN_USER_IDS}
+      - PLAYWRIGHT_ENABLED=${PLAYWRIGHT_ENABLED:-}
     volumes:
       - xdeca_pm_bot_data:/app/data
 

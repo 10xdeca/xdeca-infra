@@ -323,7 +323,8 @@ OUTLINE_BASE_URL=\(.outline_base_url)
 RADICALE_PASSWORD=\(.radicale_password)
 SPRINT_START_DATE=\(.sprint_start_date)
 REMINDER_INTERVAL_HOURS=\(.reminder_interval_hours)
-ADMIN_USER_IDS=\(.admin_user_ids)"' > "$REPO_ROOT/xdeca-pm-bot/.env"
+ADMIN_USER_IDS=\(.admin_user_ids)
+PLAYWRIGHT_ENABLED=\(.playwright_enabled)"' > "$REPO_ROOT/xdeca-pm-bot/.env"
 
     # Deploy files
     ssh "$REMOTE" "mkdir -p ~/apps/xdeca-pm-bot/src"
