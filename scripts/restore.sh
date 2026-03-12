@@ -133,8 +133,8 @@ restore_outline() {
   log "Outline restore complete!"
 }
 
-restore_pm_bot() {
-  log "Restoring xdeca-pm-bot..."
+restore_gremlin() {
+  log "Restoring gremlin..."
 
   # Find backup file
   if [ -n "$DATE" ]; then
@@ -157,16 +157,16 @@ restore_pm_bot() {
 
   # Copy SQLite database into container volume
   log "Restoring database..."
-  docker cp "$RESTORE_DIR/$BACKUP_FILE" xdeca-pm-bot:/app/data/kan-bot.db
+  docker cp "$RESTORE_DIR/$BACKUP_FILE" gremlin:/app/data/kan-bot.db
 
-  log "Restarting xdeca-pm-bot..."
-  cd ~/apps/xdeca-pm-bot
+  log "Restarting gremlin..."
+  cd ~/apps/gremlin
   docker compose restart
 
   # Cleanup
   rm -f "$RESTORE_DIR/$BACKUP_FILE"
 
-  log "xdeca-pm-bot restore complete!"
+  log "gremlin restore complete!"
 }
 
 restore_radicale() {
@@ -222,15 +222,15 @@ case $SERVICE in
   radicale)
     restore_radicale
     ;;
-  pm-bot)
-    restore_pm_bot
+  gremlin|pm-bot)
+    restore_gremlin
     ;;
   list)
     list_backups "${DATE:-kanbn}"
     ;;
   *)
     error "Unknown service: $SERVICE"
-    echo "Valid services: kanbn, outline, radicale, pm-bot, list"
+    echo "Valid services: kanbn, outline, radicale, gremlin, list"
     exit 1
     ;;
 esac

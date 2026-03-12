@@ -24,7 +24,7 @@ The GCE instance has moderate resources (4GB RAM, 2 vCPU) but running many `dock
 ├── outline/            # Team wiki (Notion alternative)
 ├── radicale/           # CalDAV/CardDAV server
 ├── scripts/            # Deployment & backup scripts
-├── xdeca-pm-bot/       # Telegram bot for Kan.bn
+├── gremlin/       # Telegram bot for Kan.bn
 └── .sops.yaml          # SOPS encryption config
 ```
 
@@ -49,7 +49,7 @@ The GCE instance has moderate resources (4GB RAM, 2 vCPU) but running many `dock
 |---------|------|-----|-------------|
 | Caddy | 80/443 | - | Reverse proxy, auto-TLS |
 | Kan.bn | 3003 | tasks.xdeca.com | Kanban boards (Trello-like) |
-| xdeca-pm-bot | - | Telegram | AI task assistant for Kan.bn |
+| gremlin | - | Telegram | AI task assistant for Kan.bn |
 | Outline | 3002 | kb.xdeca.com | Team wiki (Notion-like) |
 | MinIO | 9000 | storage.xdeca.com | S3-compatible file storage |
 | Radicale | 5232 | dav.xdeca.com | CalDAV/CardDAV (calendar & contacts) |
@@ -93,7 +93,7 @@ Each service has its own `docker-compose.yml` and isolated network. Caddy uses `
 
 
 ┌─────────────────────────────────────────────────────────────────────┐
-│                      xdeca-pm-bot (standalone)                       │
+│                      gremlin (standalone)                       │
 │                                                                     │
 │  ┌──────────┐    HTTP API     ┌──────────┐    Telegram    ┌──────┐ │
 │  │  SQLite  │◄───────────────►│  Bot     │◄──────────────►│Users │ │
@@ -110,7 +110,7 @@ Each service has its own `docker-compose.yml` and isolated network. Caddy uses `
 - `outline/` - own network with postgres, redis, minio
 - `kanbn/` - own network with postgres; uses shared MinIO via `storage.xdeca.com`
 - `radicale/` - standalone container; file-based storage in Docker volume
-- `xdeca-pm-bot/` - no docker network; talks to Kan.bn via public API, Telegram via polling
+- `gremlin/` - no docker network; talks to Kan.bn via public API, Telegram via polling
 - `caddy/` - `network_mode: host` to bind 80/443 directly
 
 **Shared resources:**
@@ -126,7 +126,7 @@ Daily backups to Google Cloud Storage.
 | Kan.bn | 4 AM | 7 days |
 | Outline | 4 AM | 7 days |
 | Radicale | 4 AM | 7 days |
-| xdeca-pm-bot | 4 AM | 7 days |
+| gremlin | 4 AM | 7 days |
 
 ```bash
 # Manual commands (run on VPS)
@@ -134,7 +134,7 @@ Daily backups to Google Cloud Storage.
 /opt/scripts/restore.sh kanbn    # Restore Kan.bn
 /opt/scripts/restore.sh outline  # Restore Outline
 /opt/scripts/restore.sh radicale # Restore Radicale
-/opt/scripts/restore.sh pm-bot   # Restore xdeca-pm-bot
+/opt/scripts/restore.sh gremlin  # Restore gremlin
 ```
 
 ## Cloud Provider
@@ -301,11 +301,11 @@ Use base URL `https://dav.xdeca.com` with your username/password in:
 
 ---
 
-# xdeca-pm-bot
+# gremlin
 
 Telegram bot for Kan.bn task management. Uses Claude AI for natural language interaction.
 
-**Source**: [10xdeca/xdeca-pm-bot](https://github.com/10xdeca/xdeca-pm-bot)
+**Source**: [10xdeca/gremlin](https://github.com/10xdeca/gremlin)
 
 ## Features
 
@@ -327,9 +327,9 @@ Telegram bot for Kan.bn task management. Uses Claude AI for natural language int
 ## Setup
 
 ```bash
-# Deploy (source from https://github.com/10xdeca/xdeca-pm-bot)
-./scripts/deploy-to.sh 34.116.110.7 xdeca-pm-bot
+# Deploy (source from https://github.com/10xdeca/gremlin)
+./scripts/deploy-to.sh 34.116.110.7 gremlin
 
 # Check logs
-ssh 34.116.110.7 'docker logs -f xdeca-pm-bot'
+ssh 34.116.110.7 'docker logs -f gremlin'
 ```

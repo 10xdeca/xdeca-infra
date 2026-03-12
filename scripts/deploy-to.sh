@@ -1,7 +1,7 @@
 #!/bin/bash
 # Deploy services to any VPS
 # Usage: ./scripts/deploy-to.sh <ip> [service]
-# Services: all, caddy, outline, kanbn, radicale, backups, scripts
+# Services: all, caddy, outline, kanbn, radicale, gremlin, backups, scripts
 
 set -e
 
@@ -29,15 +29,15 @@ deploy_scripts() {
     ssh "$REMOTE" "sudo mv /tmp/scripts/* /opt/scripts/ && sudo chmod +x /opt/scripts/*.sh"
 
     # Set up health check cron
-    local PM_BOT_SECRETS="$REPO_ROOT/xdeca-pm-bot/secrets.yaml"
-    if [ -f "$PM_BOT_SECRETS" ]; then
+    local GREMLIN_SECRETS="$REPO_ROOT/gremlin/secrets.yaml"
+    if [ -f "$GREMLIN_SECRETS" ]; then
         echo "Setting up health check cron..."
         local BOT_TOKEN
-        BOT_TOKEN=$(sops -d "$PM_BOT_SECRETS" | yq -r '.telegram_bot_token')
+        BOT_TOKEN=$(sops -d "$GREMLIN_SECRETS" | yq -r '.telegram_bot_token')
         ssh "$REMOTE" "mkdir -p ~/logs && echo '0 * * * * ubuntu TELEGRAM_BOT_TOKEN=$BOT_TOKEN TELEGRAM_CHAT_ID=-1002401283379 TELEGRAM_THREAD_ID=101 /opt/scripts/health-check.sh >> /home/ubuntu/logs/health-check.log 2>&1' | sudo tee /etc/cron.d/health-check > /dev/null"
         echo "Health check cron installed (hourly)"
     else
-        echo "WARNING: xdeca-pm-bot/secrets.yaml not found, skipping health check cron"
+        echo "WARNING: gremlin/secrets.yaml not found, skipping health check cron"
     fi
 
     echo "Scripts deployed to /opt/scripts/"
@@ -119,7 +119,18 @@ EOF
     # Set up backup cron job and log directory
     echo "Setting up backup cron job..."
     ssh "$REMOTE" "mkdir -p ~/logs"
-    ssh "$REMOTE" "echo '0 4 * * * ubuntu /opt/scripts/backup.sh all >> /home/ubuntu/logs/backup.log 2>&1' | sudo tee /etc/cron.d/backup > /dev/null"
+
+    local CRON_ENV=""
+    local GREMLIN_SECRETS="$REPO_ROOT/gremlin/secrets.yaml"
+    if [ -f "$GREMLIN_SECRETS" ]; then
+        local BOT_TOKEN
+        BOT_TOKEN=$(sops -d "$GREMLIN_SECRETS" | yq -r '.telegram_bot_token')
+        CRON_ENV="TELEGRAM_BOT_TOKEN=$BOT_TOKEN TELEGRAM_CHAT_ID=-1002401283379 TELEGRAM_THREAD_ID=101 "
+    else
+        echo "WARNING: gremlin/secrets.yaml not found, backup alerts won't be sent"
+    fi
+
+    ssh "$REMOTE" "echo '0 4 * * * ubuntu ${CRON_ENV}/opt/scripts/backup.sh all >> /home/ubuntu/logs/backup.log 2>&1' | sudo tee /etc/cron.d/backup > /dev/null"
 
     # --- GitHub backup setup ---
     echo ""
@@ -292,28 +303,28 @@ WEBHOOK_SECRET=\(.webhook_secret)"' > "$REPO_ROOT/kanbn/.env"
     echo "  Note: First user to sign up becomes admin"
 }
 
-deploy_pm_bot() {
-    echo "Deploying xdeca-pm-bot (Telegram)..."
+deploy_gremlin() {
+    echo "Deploying gremlin (Telegram)..."
 
-    local PM_BOT_SECRETS="$REPO_ROOT/xdeca-pm-bot/secrets.yaml"
-    local PM_BOT_SRC="$REPO_ROOT/../xdeca-pm-bot"
+    local GREMLIN_SECRETS="$REPO_ROOT/gremlin/secrets.yaml"
+    local GREMLIN_SRC="$REPO_ROOT/../gremlin"
 
     # Check for secrets file
-    if [ ! -f "$PM_BOT_SECRETS" ]; then
-        echo "ERROR: xdeca-pm-bot/secrets.yaml not found"
-        echo "Create it from secrets.yaml.example and encrypt with: sops -e -i xdeca-pm-bot/secrets.yaml"
+    if [ ! -f "$GREMLIN_SECRETS" ]; then
+        echo "ERROR: gremlin/secrets.yaml not found"
+        echo "Create it from secrets.yaml.example and encrypt with: sops -e -i gremlin/secrets.yaml"
         return 1
     fi
 
     # Check for source code
-    if [ ! -d "$PM_BOT_SRC" ]; then
-        echo "ERROR: xdeca-pm-bot source not found at $PM_BOT_SRC"
+    if [ ! -d "$GREMLIN_SRC" ]; then
+        echo "ERROR: gremlin source not found at $GREMLIN_SRC"
         return 1
     fi
 
     # Generate .env from encrypted secrets
     echo "Generating .env from encrypted secrets..."
-    sops -d "$PM_BOT_SECRETS" | yq -r '"# xdeca-pm-bot Configuration (auto-generated from secrets.yaml)
+    sops -d "$GREMLIN_SECRETS" | yq -r '"# gremlin Configuration (auto-generated from secrets.yaml)
 TELEGRAM_BOT_TOKEN=\(.telegram_bot_token)
 KAN_API_KEY=\(.kan_api_key)
 CLAUDE_REFRESH_TOKEN=\(.claude_refresh_token)
@@ -324,25 +335,26 @@ RADICALE_PASSWORD=\(.radicale_password)
 SPRINT_START_DATE=\(.sprint_start_date)
 REMINDER_INTERVAL_HOURS=\(.reminder_interval_hours)
 ADMIN_USER_IDS=\(.admin_user_ids)
-PLAYWRIGHT_ENABLED=\(.playwright_enabled)"' > "$REPO_ROOT/xdeca-pm-bot/.env"
+PLAYWRIGHT_ENABLED=\(.playwright_enabled)
+GITHUB_TOKEN=\(.github_token // "")"' > "$REPO_ROOT/gremlin/.env"
 
     # Deploy files
-    ssh "$REMOTE" "mkdir -p ~/apps/xdeca-pm-bot/src"
+    ssh "$REMOTE" "mkdir -p ~/apps/gremlin/src"
 
     # Copy docker compose and .env
-    rsync -avz --exclude 'secrets.yaml' "$REPO_ROOT/xdeca-pm-bot/" "$REMOTE":~/apps/xdeca-pm-bot/
+    rsync -avz --exclude 'secrets.yaml' "$REPO_ROOT/gremlin/" "$REMOTE":~/apps/gremlin/
 
     # Copy source code
-    rsync -avz --delete --exclude 'node_modules' --exclude 'dist' --exclude '.env' --exclude 'data' "$PM_BOT_SRC/" "$REMOTE":~/apps/xdeca-pm-bot/src/
+    rsync -avz --delete --exclude 'node_modules' --exclude 'dist' --exclude '.env' --exclude 'data' "$GREMLIN_SRC/" "$REMOTE":~/apps/gremlin/src/
 
     # Clean up local .env
-    rm -f "$REPO_ROOT/xdeca-pm-bot/.env"
+    rm -f "$REPO_ROOT/gremlin/.env"
 
     # Build and start
-    ssh "$REMOTE" "cd ~/apps/xdeca-pm-bot && DOCKER_BUILDKIT=1 docker compose build --pull && docker compose up -d"
+    ssh "$REMOTE" "cd ~/apps/gremlin && DOCKER_BUILDKIT=1 docker compose build --pull && docker compose up -d"
 
-    echo "xdeca-pm-bot deployed!"
-    echo "  Check logs: ssh $REMOTE 'docker logs -f xdeca-pm-bot'"
+    echo "gremlin deployed!"
+    echo "  Check logs: ssh $REMOTE 'docker logs -f gremlin'"
 }
 
 deploy_radicale() {
@@ -384,7 +396,7 @@ case $SERVICE in
         deploy_outline
         deploy_kanbn
         deploy_radicale
-        deploy_pm_bot
+        deploy_gremlin
         ;;
     scripts)
         deploy_scripts
@@ -404,12 +416,12 @@ case $SERVICE in
     radicale|dav)
         deploy_radicale
         ;;
-    xdeca-pm-bot|pm-bot|telegram)
-        deploy_pm_bot
+    gremlin|pm-bot|telegram)
+        deploy_gremlin
         ;;
     *)
         echo "Unknown service: $SERVICE"
-        echo "Usage: $0 <ip> [all|caddy|outline|kanbn|radicale|xdeca-pm-bot|backups|scripts]"
+        echo "Usage: $0 <ip> [all|caddy|outline|kanbn|radicale|gremlin|backups|scripts]"
         exit 1
         ;;
 esac
