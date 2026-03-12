@@ -1,9 +1,9 @@
 services:
-  xdeca-pm-bot:
+  gremlin:
     build:
       context: ./src
       dockerfile: Dockerfile
-    container_name: xdeca-pm-bot
+    container_name: gremlin
     restart: unless-stopped
     environment:
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
@@ -20,8 +20,9 @@ services:
       - REMINDER_INTERVAL_HOURS=${REMINDER_INTERVAL_HOURS:-1}
       - ADMIN_USER_IDS=${ADMIN_USER_IDS}
       - PLAYWRIGHT_ENABLED=${PLAYWRIGHT_ENABLED:-}
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
     volumes:
-      - xdeca_pm_bot_data:/app/data
+      - gremlin_data:/app/data
 
   survey:
     build:
@@ -40,4 +41,4 @@ services:
     command: ["npx", "tsx", "survey/server.ts"]
 
 volumes:
-  xdeca_pm_bot_data:
+  gremlin_data:
