@@ -336,7 +336,7 @@ SPRINT_START_DATE=\(.sprint_start_date)
 REMINDER_INTERVAL_HOURS=\(.reminder_interval_hours)
 ADMIN_USER_IDS=\(.admin_user_ids)
 PLAYWRIGHT_ENABLED=\(.playwright_enabled)
-GITHUB_TOKEN=\(.github_token // "")"' > "$REPO_ROOT/gremlin/.env"
+GITHUB_TOKEN=\(.github_token)"' > "$REPO_ROOT/gremlin/.env"
 
     # Deploy files
     ssh "$REMOTE" "mkdir -p ~/apps/gremlin/src"
