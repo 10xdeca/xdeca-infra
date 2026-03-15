@@ -1,6 +1,8 @@
 services:
   outline:
-    image: docker.getoutline.com/outlinewiki/outline:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: outline
     restart: unless-stopped
     depends_on:
