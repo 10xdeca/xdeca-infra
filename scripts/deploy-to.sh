@@ -34,10 +34,17 @@ deploy_scripts() {
         echo "Setting up health check cron..."
         local BOT_TOKEN
         BOT_TOKEN=$(sops -d "$GREMLIN_SECRETS" | yq -r '.telegram_bot_token')
-        ssh "$REMOTE" "mkdir -p ~/logs && echo '0 * * * * ubuntu TELEGRAM_BOT_TOKEN=$BOT_TOKEN TELEGRAM_CHAT_ID=-1002401283379 TELEGRAM_THREAD_ID=101 /opt/scripts/health-check.sh >> /home/ubuntu/logs/health-check.log 2>&1' | sudo tee /etc/cron.d/health-check > /dev/null"
+        local CRON_ENV="TELEGRAM_BOT_TOKEN=$BOT_TOKEN TELEGRAM_CHAT_ID=-1002401283379 TELEGRAM_THREAD_ID=101"
+        ssh "$REMOTE" "mkdir -p ~/logs && echo '0 * * * * ubuntu ${CRON_ENV} /opt/scripts/health-check.sh >> /home/ubuntu/logs/health-check.log 2>&1' | sudo tee /etc/cron.d/health-check > /dev/null"
         echo "Health check cron installed (hourly)"
+
+        # Set up release watcher cron (daily at 9 AM)
+        ssh "$REMOTE" "echo '0 9 * * * ubuntu ${CRON_ENV} /opt/scripts/release-watch.sh >> /home/ubuntu/logs/release-watch.log 2>&1' | sudo tee /etc/cron.d/release-watch > /dev/null"
+        # Seed state file so first run doesn't silently swallow the current version
+        ssh "$REMOTE" "test -f /home/ubuntu/.release-watch-state || echo 'outline/outline=v1.5.0' > /home/ubuntu/.release-watch-state"
+        echo "Release watcher cron installed (daily at 9 AM)"
     else
-        echo "WARNING: gremlin/secrets.yaml not found, skipping health check cron"
+        echo "WARNING: gremlin/secrets.yaml not found, skipping health check and release watcher crons"
     fi
 
     echo "Scripts deployed to /opt/scripts/"
@@ -337,6 +344,11 @@ REMINDER_INTERVAL_HOURS=\(.reminder_interval_hours)
 ADMIN_USER_IDS=\(.admin_user_ids)
 PLAYWRIGHT_ENABLED=\(.playwright_enabled)
 GITHUB_TOKEN=\(.github_token)"' > "$REPO_ROOT/gremlin/.env"
+
+    # Append DEPLOY_SHA from source repo
+    local DEPLOY_SHA
+    DEPLOY_SHA=$(cd "$GREMLIN_SRC" && git rev-parse --short HEAD 2>/dev/null || echo "dev")
+    echo "DEPLOY_SHA=$DEPLOY_SHA" >> "$REPO_ROOT/gremlin/.env"
 
     # Deploy files
     ssh "$REMOTE" "mkdir -p ~/apps/gremlin/src"
