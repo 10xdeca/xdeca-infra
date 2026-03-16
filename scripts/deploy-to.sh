@@ -227,8 +227,8 @@ SMTP_SECURE=\(.smtp_secure)"' > "$REPO_ROOT/outline/.env"
     # Clean up local .env
     rm -f "$REPO_ROOT/outline/.env"
 
-    # Build from source and start Outline
-    ssh "$REMOTE" "cd ~/apps/outline && DOCKER_BUILDKIT=1 docker compose build --pull && docker compose up -d"
+    # Start Outline
+    ssh "$REMOTE" "cd ~/apps/outline && docker compose pull && docker compose up -d"
 
     echo "Outline deployed!"
     echo "  URL: https://kb.xdeca.com"
