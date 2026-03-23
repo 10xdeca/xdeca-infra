@@ -18,7 +18,8 @@ fi
 IP=$1
 SERVICE=${2:-all}
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-REMOTE="ubuntu@$IP"
+REMOTE="nick@$IP"
+APP_PREFIX="xdeca-"
 
 echo "Deploying to $REMOTE..."
 
@@ -34,7 +35,7 @@ deploy_scripts() {
         echo "Setting up health check cron..."
         local BOT_TOKEN
         BOT_TOKEN=$(sops -d "$GREMLIN_SECRETS" | yq -r '.telegram_bot_token')
-        ssh "$REMOTE" "mkdir -p ~/logs && echo '0 * * * * ubuntu TELEGRAM_BOT_TOKEN=$BOT_TOKEN TELEGRAM_CHAT_ID=-1002401283379 TELEGRAM_THREAD_ID=101 /opt/scripts/health-check.sh >> /home/ubuntu/logs/health-check.log 2>&1' | sudo tee /etc/cron.d/health-check > /dev/null"
+        ssh "$REMOTE" "mkdir -p ~/logs && echo '0 * * * * nick TELEGRAM_BOT_TOKEN=$BOT_TOKEN TELEGRAM_CHAT_ID=-1002401283379 TELEGRAM_THREAD_ID=101 /opt/scripts/health-check.sh >> /home/nick/logs/health-check.log 2>&1' | sudo tee /etc/cron.d/xdeca-health-check > /dev/null"
         echo "Health check cron installed (hourly)"
     else
         echo "WARNING: gremlin/secrets.yaml not found, skipping health check cron"
@@ -45,53 +46,15 @@ deploy_scripts() {
 
 deploy_service() {
     local svc=$1
-    echo "Deploying $svc..."
-    ssh "$REMOTE" "mkdir -p ~/apps/$svc"
-    rsync -avz --delete "$REPO_ROOT/$svc/" "$REMOTE":~/apps/"$svc"/
-    ssh "$REMOTE" "cd ~/apps/$svc && docker compose pull && docker compose up -d"
+    local app_dir="${APP_PREFIX}${svc}"
+    echo "Deploying $svc to ~/apps/$app_dir..."
+    ssh "$REMOTE" "mkdir -p ~/apps/$app_dir"
+    rsync -avz --delete "$REPO_ROOT/$svc/" "$REMOTE":~/apps/"$app_dir"/
+    ssh "$REMOTE" "cd ~/apps/$app_dir && docker compose pull && docker compose up -d"
 }
 
 deploy_backups() {
     echo "Deploying backup configuration..."
-
-    local BACKUP_SECRETS="$REPO_ROOT/backups/secrets.yaml"
-
-    if [ ! -f "$BACKUP_SECRETS" ]; then
-        echo "WARNING: No backups/secrets.yaml found. Skipping backup setup."
-        return 0
-    fi
-
-    # Decrypt and extract GCS config
-    echo "Extracting GCS configuration..."
-    local GCS_BUCKET
-    local GCS_PROJECT
-    GCS_BUCKET=$(sops -d "$BACKUP_SECRETS" | yq -r '.gcs_bucket')
-    GCS_PROJECT=$(sops -d "$BACKUP_SECRETS" | yq -r '.gcs_project')
-
-    if [ -z "$GCS_BUCKET" ] || [ "$GCS_BUCKET" = "null" ]; then
-        echo "ERROR: Invalid backup secrets. Check backups/secrets.yaml"
-        return 1
-    fi
-
-    # Generate rclone config for Google Cloud Storage
-    # Uses GCE instance service account — no credentials needed
-    echo "Generating rclone configuration (GCS)..."
-    cat > /tmp/rclone.conf << EOF
-[gcs]
-type = google cloud storage
-project_number = $GCS_PROJECT
-bucket_policy_only = true
-EOF
-
-    # Deploy rclone config
-    ssh "$REMOTE" "mkdir -p ~/.config/rclone"
-    scp /tmp/rclone.conf "$REMOTE":~/.config/rclone/rclone.conf
-    ssh "$REMOTE" "chmod 600 ~/.config/rclone/rclone.conf"
-    rm /tmp/rclone.conf
-
-    # Create GCS bucket if it doesn't exist
-    echo "Ensuring GCS bucket exists..."
-    ssh "$REMOTE" "rclone mkdir gcs:$GCS_BUCKET 2>/dev/null || true"
 
     # Deploy backup scripts
     echo "Deploying backup scripts..."
@@ -100,15 +63,7 @@ EOF
     scp "$REPO_ROOT/scripts/restore.sh" "$REMOTE":/tmp/restore.sh
     ssh "$REMOTE" "sudo mv /tmp/backup.sh /tmp/restore.sh /opt/scripts/"
     ssh "$REMOTE" "sudo chmod +x /opt/scripts/backup.sh /opt/scripts/restore.sh"
-    ssh "$REMOTE" "sudo chown ubuntu:ubuntu /opt/scripts/*.sh"
-
-    # Test rclone connection
-    echo "Testing rclone connection..."
-    if ssh "$REMOTE" "rclone lsd gcs: 2>/dev/null"; then
-        echo "rclone connection successful!"
-    else
-        echo "Connection test failed - check GCE service account permissions"
-    fi
+    ssh "$REMOTE" "sudo chown nick:nick /opt/scripts/*.sh"
 
     # Ensure cron is installed and running
     if ! ssh "$REMOTE" "systemctl is-active cron > /dev/null 2>&1"; then
@@ -130,7 +85,7 @@ EOF
         echo "WARNING: gremlin/secrets.yaml not found, backup alerts won't be sent"
     fi
 
-    ssh "$REMOTE" "echo '0 4 * * * ubuntu ${CRON_ENV}/opt/scripts/backup.sh all >> /home/ubuntu/logs/backup.log 2>&1' | sudo tee /etc/cron.d/backup > /dev/null"
+    ssh "$REMOTE" "echo '0 4 * * * nick ${CRON_ENV}/opt/scripts/backup.sh all >> /home/nick/logs/backup.log 2>&1' | sudo tee /etc/cron.d/xdeca-backup > /dev/null"
 
     # --- GitHub backup setup ---
     echo ""
@@ -167,7 +122,6 @@ SSHEOF'
     echo ""
 
     echo "Backup configuration complete!"
-    echo "  - rclone config: ~/.config/rclone/rclone.conf (GCS via service account)"
     echo "  - GitHub backup: 10xdeca/xdeca-backups (private repo)"
     echo "  - Deploy key: ~/.ssh/xdeca-backups-deploy"
     echo "  - Scripts: /opt/scripts/backup.sh, /opt/scripts/restore.sh"
@@ -180,6 +134,7 @@ deploy_outline() {
     echo "Deploying Outline Wiki..."
 
     local OUTLINE_SECRETS="$REPO_ROOT/outline/secrets.yaml"
+    local APP_DIR="${APP_PREFIX}outline"
 
     # Check for secrets file
     if [ ! -f "$OUTLINE_SECRETS" ]; then
@@ -214,17 +169,17 @@ SMTP_FROM_EMAIL=\(.smtp_from_email)
 SMTP_SECURE=\(.smtp_secure)"' > "$REPO_ROOT/outline/.env"
 
     # Deploy files
-    ssh "$REMOTE" "mkdir -p ~/apps/outline"
-    rsync -avz --delete --exclude 'secrets.yaml' "$REPO_ROOT/outline/" "$REMOTE":~/apps/outline/
+    ssh "$REMOTE" "mkdir -p ~/apps/$APP_DIR"
+    rsync -avz --delete --exclude 'secrets.yaml' "$REPO_ROOT/outline/" "$REMOTE":~/apps/"$APP_DIR"/
 
     # Clean up local .env
     rm -f "$REPO_ROOT/outline/.env"
 
     # Start Outline
-    ssh "$REMOTE" "cd ~/apps/outline && docker compose pull && docker compose up -d"
+    ssh "$REMOTE" "cd ~/apps/$APP_DIR && docker compose pull && docker compose up -d"
 
     echo "Outline deployed!"
-    echo "  URL: https://kb.xdeca.com"
+    echo "  URL: https://wiki.xdeca.com"
     echo "  Note: First user to sign in becomes admin"
 }
 
@@ -232,6 +187,7 @@ deploy_kanbn() {
     echo "Deploying Kan.bn..."
 
     local KANBN_SECRETS="$REPO_ROOT/kanbn/secrets.yaml"
+    local APP_DIR="${APP_PREFIX}kanbn"
 
     # Check for secrets file
     if [ ! -f "$KANBN_SECRETS" ]; then
@@ -260,43 +216,15 @@ NEXT_PUBLIC_STORAGE_URL=\(.next_public_storage_url)
 WEBHOOK_URL=\(.webhook_url)
 WEBHOOK_SECRET=\(.webhook_secret)"' > "$REPO_ROOT/kanbn/.env"
 
-    local KAN_SRC="$REPO_ROOT/../kan"
-
-    # Check for source code
-    if [ ! -d "$KAN_SRC" ]; then
-        echo "ERROR: kan source not found at $KAN_SRC"
-        echo "Clone it with: git clone git@github.com:10xdeca/kan.git $KAN_SRC"
-        return 1
-    fi
-
-    # Deploy .env and compose files (not source code)
-    ssh "$REMOTE" "mkdir -p ~/apps/kanbn"
-    rsync -avz --delete --exclude 'secrets.yaml' --exclude 'kan-source' "$REPO_ROOT/kanbn/" "$REMOTE":~/apps/kanbn/
+    # Deploy .env and compose files
+    ssh "$REMOTE" "mkdir -p ~/apps/$APP_DIR"
+    rsync -avz --delete --exclude 'secrets.yaml' "$REPO_ROOT/kanbn/" "$REMOTE":~/apps/"$APP_DIR"/
 
     # Clean up local .env
     rm -f "$REPO_ROOT/kanbn/.env"
 
-    # Build Docker image locally for linux/amd64 (VPS is x86_64)
-    local IMAGE_TAR="/tmp/kanbn-image.tar"
-    echo "Building kanbn image locally for linux/amd64..."
-    docker buildx build \
-        --platform linux/amd64 \
-        --pull \
-        -t kanbn:local \
-        -f "$KAN_SRC/apps/web/Dockerfile" \
-        "$KAN_SRC" \
-        --output "type=docker,dest=$IMAGE_TAR"
-
-    # Transfer image to VPS
-    echo "Transferring image to VPS..."
-    rsync -az --progress "$IMAGE_TAR" "$REMOTE":/tmp/kanbn-image.tar
-
-    # Load image and restart container
-    echo "Loading image and restarting container..."
-    ssh "$REMOTE" "docker load < /tmp/kanbn-image.tar && rm /tmp/kanbn-image.tar && cd ~/apps/kanbn && docker compose up -d"
-
-    # Clean up local tar
-    rm -f "$IMAGE_TAR"
+    # Pull upstream image and start
+    ssh "$REMOTE" "cd ~/apps/$APP_DIR && docker compose pull && docker compose up -d"
 
     echo "Kan.bn deployed!"
     echo "  URL: https://tasks.xdeca.com"
@@ -308,6 +236,7 @@ deploy_gremlin() {
 
     local GREMLIN_SECRETS="$REPO_ROOT/gremlin/secrets.yaml"
     local GREMLIN_SRC="$REPO_ROOT/../gremlin"
+    local APP_DIR="${APP_PREFIX}gremlin"
 
     # Check for secrets file
     if [ ! -f "$GREMLIN_SECRETS" ]; then
@@ -340,19 +269,19 @@ CONTACT_SCANNER_ENABLED=\(.contact_scanner_enabled)
 GITHUB_TOKEN=\(.github_token)"' > "$REPO_ROOT/gremlin/.env"
 
     # Deploy files
-    ssh "$REMOTE" "mkdir -p ~/apps/gremlin/src"
+    ssh "$REMOTE" "mkdir -p ~/apps/$APP_DIR/src"
 
     # Copy docker compose and .env
-    rsync -avz --exclude 'secrets.yaml' "$REPO_ROOT/gremlin/" "$REMOTE":~/apps/gremlin/
+    rsync -avz --exclude 'secrets.yaml' "$REPO_ROOT/gremlin/" "$REMOTE":~/apps/"$APP_DIR"/
 
     # Copy source code
-    rsync -avz --delete --exclude 'node_modules' --exclude 'dist' --exclude '.env' --exclude 'data' "$GREMLIN_SRC/" "$REMOTE":~/apps/gremlin/src/
+    rsync -avz --delete --exclude 'node_modules' --exclude 'dist' --exclude '.env' --exclude 'data' "$GREMLIN_SRC/" "$REMOTE":~/apps/"$APP_DIR"/src/
 
     # Clean up local .env
     rm -f "$REPO_ROOT/gremlin/.env"
 
     # Build and start
-    ssh "$REMOTE" "cd ~/apps/gremlin && DOCKER_BUILDKIT=1 docker compose build --pull && docker compose up -d"
+    ssh "$REMOTE" "cd ~/apps/$APP_DIR && DOCKER_BUILDKIT=1 docker compose build --pull && docker compose up -d"
 
     echo "gremlin deployed!"
     echo "  Check logs: ssh $REMOTE 'docker logs -f gremlin'"
@@ -362,6 +291,7 @@ deploy_radicale() {
     echo "Deploying Radicale (CalDAV/CardDAV)..."
 
     local RADICALE_SECRETS="$REPO_ROOT/radicale/secrets.yaml"
+    local APP_DIR="${APP_PREFIX}radicale"
 
     # Check for secrets file
     if [ ! -f "$RADICALE_SECRETS" ]; then
@@ -375,14 +305,14 @@ deploy_radicale() {
     sops -d "$RADICALE_SECRETS" | yq -r '.htpasswd_users' > "$REPO_ROOT/radicale/config/users"
 
     # Deploy files
-    ssh "$REMOTE" "mkdir -p ~/apps/radicale"
-    rsync -avz --delete --exclude 'secrets.yaml' "$REPO_ROOT/radicale/" "$REMOTE":~/apps/radicale/
+    ssh "$REMOTE" "mkdir -p ~/apps/$APP_DIR"
+    rsync -avz --delete --exclude 'secrets.yaml' "$REPO_ROOT/radicale/" "$REMOTE":~/apps/"$APP_DIR"/
 
     # Clean up local users file
     rm -f "$REPO_ROOT/radicale/config/users"
 
     # Start Radicale
-    ssh "$REMOTE" "cd ~/apps/radicale && docker compose pull && docker compose up -d"
+    ssh "$REMOTE" "cd ~/apps/$APP_DIR && docker compose pull && docker compose up -d"
 
     echo "Radicale deployed!"
     echo "  URL: https://dav.xdeca.com"

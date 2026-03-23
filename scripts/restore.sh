@@ -64,8 +64,8 @@ restore_kanbn() {
   rclone copy "$RCLONE_REMOTE:$BUCKET/kanbn/$BACKUP_FILE" "$RESTORE_DIR/"
 
   # Ensure Kan.bn postgres is running
-  cd ~/apps/kanbn
-  docker-compose up -d kanbn_postgres
+  cd ~/apps/xdeca-kanbn
+  docker compose up -d postgres
   log "Waiting for PostgreSQL to start..."
   sleep 10
 
@@ -79,7 +79,7 @@ restore_kanbn() {
     docker exec -i kanbn_postgres psql -U kanbn kanbn
 
   log "Restarting Kan.bn..."
-  docker-compose restart
+  docker compose restart
 
   # Cleanup
   rm -f "$RESTORE_DIR/$BACKUP_FILE"
@@ -110,8 +110,8 @@ restore_outline() {
   rclone copy "$RCLONE_REMOTE:$BUCKET/outline/$BACKUP_FILE" "$RESTORE_DIR/"
 
   # Ensure Outline postgres is running
-  cd ~/apps/outline
-  docker-compose up -d outline_postgres
+  cd ~/apps/xdeca-outline
+  docker compose up -d postgres
   log "Waiting for PostgreSQL to start..."
   sleep 10
 
@@ -125,7 +125,7 @@ restore_outline() {
     docker exec -i outline_postgres psql -U outline outline
 
   log "Restarting Outline..."
-  docker-compose restart
+  docker compose restart
 
   # Cleanup
   rm -f "$RESTORE_DIR/$BACKUP_FILE"
@@ -136,35 +136,28 @@ restore_outline() {
 restore_gremlin() {
   log "Restoring gremlin..."
 
-  # Find backup file
-  if [ -n "$DATE" ]; then
-    BACKUP_FILE="pm-bot-$DATE.db"
-  else
-    BACKUP_FILE=$(rclone ls "$RCLONE_REMOTE:$BUCKET/pm-bot/" | sort -r | head -1 | awk '{print $2}')
-  fi
+  # Clone backup repo to get latest gremlin.db
+  log "Fetching backup from GitHub..."
+  local GITHUB_BACKUP_REPO="git@github-backups:10xdeca/xdeca-backups.git"
+  rm -rf "$RESTORE_DIR/xdeca-backups"
+  git clone --depth 1 "$GITHUB_BACKUP_REPO" "$RESTORE_DIR/xdeca-backups"
 
-  if [ -z "$BACKUP_FILE" ]; then
-    error "No backup found"
-    list_backups pm-bot
+  local BACKUP_FILE="$RESTORE_DIR/xdeca-backups/gremlin.db"
+  if [ ! -f "$BACKUP_FILE" ]; then
+    error "No gremlin.db found in backup repo"
     exit 1
   fi
 
-  log "Restoring from: $BACKUP_FILE"
-
-  # Download backup
-  log "Downloading backup from GCS..."
-  rclone copy "$RCLONE_REMOTE:$BUCKET/pm-bot/$BACKUP_FILE" "$RESTORE_DIR/"
-
   # Copy SQLite database into container volume
   log "Restoring database..."
-  docker cp "$RESTORE_DIR/$BACKUP_FILE" gremlin:/app/data/kan-bot.db
+  docker cp "$BACKUP_FILE" gremlin:/app/data/gremlin.db
 
   log "Restarting gremlin..."
-  cd ~/apps/gremlin
+  cd ~/apps/xdeca-gremlin
   docker compose restart
 
   # Cleanup
-  rm -f "$RESTORE_DIR/$BACKUP_FILE"
+  rm -rf "$RESTORE_DIR/xdeca-backups"
 
   log "gremlin restore complete!"
 }
@@ -193,7 +186,7 @@ restore_radicale() {
 
   # Stop Radicale
   log "Stopping Radicale..."
-  cd ~/apps/radicale
+  cd ~/apps/xdeca-radicale
   docker compose stop radicale
 
   # Restore collections into the volume
