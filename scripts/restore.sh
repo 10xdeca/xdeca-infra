@@ -1,17 +1,15 @@
 #!/bin/bash
 # Restore script for all services
-# Restores from Google Cloud Storage via rclone
-# Usage: ./restore.sh <service> [date]
-#   service: kanbn, outline, radicale
-#   date: YYYY-MM-DD (optional, defaults to latest)
+# Restores from GitHub backup repo (10xdeca/xdeca-backups)
+# Usage: ./restore.sh <service>
+#   service: kanbn, outline, radicale, gremlin
 
 set -e
 
 SERVICE=$1
-DATE=${2:-""}
 RESTORE_DIR="/tmp/restore"
-RCLONE_REMOTE="gcs"
-BUCKET="xdeca-backups"
+GITHUB_BACKUP_REPO="git@github-backups:10xdeca/xdeca-backups.git"
+BACKUP_CLONE_DIR="$RESTORE_DIR/xdeca-backups"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -23,45 +21,40 @@ warn() { echo -e "${YELLOW}[$(date '+%Y-%m-%d %H:%M:%S')] WARNING:${NC} $1"; }
 error() { echo -e "${RED}[$(date '+%Y-%m-%d %H:%M:%S')] ERROR:${NC} $1" >&2; }
 
 if [ -z "$SERVICE" ]; then
-  echo "Usage: $0 <service> [date]"
-  echo "  service: kanbn, outline, radicale"
-  echo "  date: YYYY-MM-DD (optional)"
+  echo "Usage: $0 <service>"
+  echo "  service: kanbn, outline, radicale, gremlin"
   echo ""
   echo "Examples:"
-  echo "  $0 kanbn              # Restore latest"
-  echo "  $0 outline 2024-01-15 # Restore specific date"
+  echo "  $0 kanbn    # Restore latest from GitHub backup"
+  echo "  $0 outline  # Restore latest from GitHub backup"
   exit 1
 fi
 
 mkdir -p "$RESTORE_DIR"
 
-list_backups() {
-  local service=$1
-  log "Available backups for $service:"
-  rclone ls "$RCLONE_REMOTE:$BUCKET/$service/" | sort -r | head -20
+# Clone the backup repo (shallow) to get latest backups
+fetch_backups() {
+  log "Fetching backups from GitHub..."
+  rm -rf "$BACKUP_CLONE_DIR"
+  git clone --depth 1 "$GITHUB_BACKUP_REPO" "$BACKUP_CLONE_DIR"
+}
+
+cleanup_backups() {
+  rm -rf "$BACKUP_CLONE_DIR"
 }
 
 restore_kanbn() {
   log "Restoring Kan.bn..."
 
-  # Find backup file
-  if [ -n "$DATE" ]; then
-    BACKUP_FILE="kanbn-$DATE.sql.gz"
-  else
-    BACKUP_FILE=$(rclone ls "$RCLONE_REMOTE:$BUCKET/kanbn/" | sort -r | head -1 | awk '{print $2}')
-  fi
+  fetch_backups
 
-  if [ -z "$BACKUP_FILE" ]; then
-    error "No backup found"
-    list_backups kanbn
+  # backup.sh stores decompressed SQL for better git deltas
+  local BACKUP_FILE="$BACKUP_CLONE_DIR/kanbn.sql"
+  if [ ! -f "$BACKUP_FILE" ]; then
+    error "No kanbn.sql found in backup repo"
+    cleanup_backups
     exit 1
   fi
-
-  log "Restoring from: $BACKUP_FILE"
-
-  # Download backup
-  log "Downloading backup from GCS..."
-  rclone copy "$RCLONE_REMOTE:$BUCKET/kanbn/$BACKUP_FILE" "$RESTORE_DIR/"
 
   # Ensure Kan.bn postgres is running
   cd ~/apps/xdeca-kanbn
@@ -75,39 +68,26 @@ restore_kanbn() {
 
   # Restore database
   log "Restoring database..."
-  gunzip -c "$RESTORE_DIR/$BACKUP_FILE" | \
-    docker exec -i kanbn_postgres psql -U kanbn kanbn
+  docker exec -i kanbn_postgres psql -U kanbn kanbn < "$BACKUP_FILE"
 
   log "Restarting Kan.bn..."
   docker compose restart
 
-  # Cleanup
-  rm -f "$RESTORE_DIR/$BACKUP_FILE"
-
+  cleanup_backups
   log "Kan.bn restore complete!"
 }
 
 restore_outline() {
   log "Restoring Outline..."
 
-  # Find backup file
-  if [ -n "$DATE" ]; then
-    BACKUP_FILE="outline-$DATE.sql.gz"
-  else
-    BACKUP_FILE=$(rclone ls "$RCLONE_REMOTE:$BUCKET/outline/" | sort -r | head -1 | awk '{print $2}')
-  fi
+  fetch_backups
 
-  if [ -z "$BACKUP_FILE" ]; then
-    error "No backup found"
-    list_backups outline
+  local BACKUP_FILE="$BACKUP_CLONE_DIR/outline.sql"
+  if [ ! -f "$BACKUP_FILE" ]; then
+    error "No outline.sql found in backup repo"
+    cleanup_backups
     exit 1
   fi
-
-  log "Restoring from: $BACKUP_FILE"
-
-  # Download backup
-  log "Downloading backup from GCS..."
-  rclone copy "$RCLONE_REMOTE:$BUCKET/outline/$BACKUP_FILE" "$RESTORE_DIR/"
 
   # Ensure Outline postgres is running
   cd ~/apps/xdeca-outline
@@ -121,30 +101,24 @@ restore_outline() {
 
   # Restore database
   log "Restoring database..."
-  gunzip -c "$RESTORE_DIR/$BACKUP_FILE" | \
-    docker exec -i outline_postgres psql -U outline outline
+  docker exec -i outline_postgres psql -U outline outline < "$BACKUP_FILE"
 
   log "Restarting Outline..."
   docker compose restart
 
-  # Cleanup
-  rm -f "$RESTORE_DIR/$BACKUP_FILE"
-
+  cleanup_backups
   log "Outline restore complete!"
 }
 
 restore_gremlin() {
   log "Restoring gremlin..."
 
-  # Clone backup repo to get latest gremlin.db
-  log "Fetching backup from GitHub..."
-  local GITHUB_BACKUP_REPO="git@github-backups:10xdeca/xdeca-backups.git"
-  rm -rf "$RESTORE_DIR/xdeca-backups"
-  git clone --depth 1 "$GITHUB_BACKUP_REPO" "$RESTORE_DIR/xdeca-backups"
+  fetch_backups
 
-  local BACKUP_FILE="$RESTORE_DIR/xdeca-backups/gremlin.db"
+  local BACKUP_FILE="$BACKUP_CLONE_DIR/gremlin.db"
   if [ ! -f "$BACKUP_FILE" ]; then
     error "No gremlin.db found in backup repo"
+    cleanup_backups
     exit 1
   fi
 
@@ -156,33 +130,21 @@ restore_gremlin() {
   cd ~/apps/xdeca-gremlin
   docker compose restart
 
-  # Cleanup
-  rm -rf "$RESTORE_DIR/xdeca-backups"
-
+  cleanup_backups
   log "gremlin restore complete!"
 }
 
 restore_radicale() {
   log "Restoring Radicale..."
 
-  # Find backup file
-  if [ -n "$DATE" ]; then
-    BACKUP_FILE="radicale-$DATE.tar.gz"
-  else
-    BACKUP_FILE=$(rclone ls "$RCLONE_REMOTE:$BUCKET/radicale/" | sort -r | head -1 | awk '{print $2}')
-  fi
+  fetch_backups
 
-  if [ -z "$BACKUP_FILE" ]; then
-    error "No backup found"
-    list_backups radicale
+  local BACKUP_FILE="$BACKUP_CLONE_DIR/radicale.tar"
+  if [ ! -f "$BACKUP_FILE" ]; then
+    error "No radicale.tar found in backup repo"
+    cleanup_backups
     exit 1
   fi
-
-  log "Restoring from: $BACKUP_FILE"
-
-  # Download backup
-  log "Downloading backup from GCS..."
-  rclone copy "$RCLONE_REMOTE:$BUCKET/radicale/$BACKUP_FILE" "$RESTORE_DIR/"
 
   # Stop Radicale
   log "Stopping Radicale..."
@@ -191,16 +153,14 @@ restore_radicale() {
 
   # Restore collections into the volume
   log "Restoring collections..."
-  docker compose run --rm --entrypoint sh -v "$RESTORE_DIR/$BACKUP_FILE:/restore.tar.gz:ro" radicale \
-    -c "rm -rf /data/collections && tar xzf /restore.tar.gz -C /"
+  docker compose run --rm --entrypoint sh -v "$BACKUP_FILE:/restore.tar:ro" radicale \
+    -c "rm -rf /data/collections && tar xf /restore.tar -C /"
 
   # Start Radicale
   log "Starting Radicale..."
   docker compose up -d
 
-  # Cleanup
-  rm -f "$RESTORE_DIR/$BACKUP_FILE"
-
+  cleanup_backups
   log "Radicale restore complete!"
 }
 
@@ -215,15 +175,12 @@ case $SERVICE in
   radicale)
     restore_radicale
     ;;
-  gremlin|pm-bot)
+  gremlin)
     restore_gremlin
-    ;;
-  list)
-    list_backups "${DATE:-kanbn}"
     ;;
   *)
     error "Unknown service: $SERVICE"
-    echo "Valid services: kanbn, outline, radicale, gremlin, list"
+    echo "Valid services: kanbn, outline, radicale, gremlin"
     exit 1
     ;;
 esac
