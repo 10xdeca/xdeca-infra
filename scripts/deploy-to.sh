@@ -179,7 +179,7 @@ SMTP_SECURE=\(.smtp_secure)"' > "$REPO_ROOT/outline/.env"
     ssh "$REMOTE" "cd ~/apps/$APP_DIR && docker compose pull && docker compose up -d"
 
     echo "Outline deployed!"
-    echo "  URL: https://wiki.xdeca.com"
+    echo "  URL: https://kb.xdeca.com"
     echo "  Note: First user to sign in becomes admin"
 }
 
