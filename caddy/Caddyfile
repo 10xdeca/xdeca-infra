@@ -13,7 +13,3 @@ tasks.xdeca.com {
 dav.xdeca.com {
     reverse_proxy localhost:5232
 }
-
-survey.xdeca.com {
-    reverse_proxy localhost:3737
-}
