@@ -327,7 +327,8 @@ deploy_gremlin() {
     sops -d "$GREMLIN_SECRETS" | yq -r '"# gremlin Configuration (auto-generated from secrets.yaml)
 TELEGRAM_BOT_TOKEN=\(.telegram_bot_token)
 KAN_API_KEY=\(.kan_api_key)
-CLAUDE_REFRESH_TOKEN=\(.claude_refresh_token)
+KAN_SERVICE_API_KEY=\(.kan_service_api_key)
+CLAUDE_CODE_OAUTH_TOKEN=\(.claude_code_oauth_token)
 KAN_BASE_URL=\(.kan_base_url)
 OUTLINE_API_KEY=\(.outline_api_key)
 OUTLINE_BASE_URL=\(.outline_base_url)
@@ -337,7 +338,10 @@ REMINDER_INTERVAL_HOURS=\(.reminder_interval_hours)
 ADMIN_USER_IDS=\(.admin_user_ids)
 PLAYWRIGHT_ENABLED=\(.playwright_enabled)
 CONTACT_SCANNER_ENABLED=\(.contact_scanner_enabled)
-GITHUB_TOKEN=\(.github_token)"' > "$REPO_ROOT/gremlin/.env"
+GITHUB_TOKEN=\(.github_token)
+GREMLIN_EMAIL=\(.gremlin_email)
+GREMLIN_EMAIL_PASSWORD=\(.gremlin_email_password)
+GREMLIN_GITHUB_TOKEN=\(.gremlin_github_token)"' > "$REPO_ROOT/gremlin/.env"
 
     # Deploy files
     ssh "$REMOTE" "mkdir -p ~/apps/gremlin/src"
