@@ -1,10 +1,23 @@
 services:
+  migrate:
+    image: ghcr.io/kanbn/kan-migrate:latest
+    container_name: kanbn-migrate
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - POSTGRES_URL=postgres://kanbn:${POSTGRES_PASSWORD}@postgres:5432/kanbn
+    networks:
+      - kanbn
+
   kanbn:
-    image: ghcr.io/10xdeca/kan:deploy-combined
+    image: ghcr.io/kanbn/kan:latest
     container_name: kanbn
     restart: unless-stopped
     depends_on:
-      - postgres
+      migrate:
+        condition: service_completed_successfully
     environment:
       - NEXT_PUBLIC_BASE_URL=${KANBN_URL}
       - BETTER_AUTH_SECRET=${AUTH_SECRET}
@@ -43,6 +56,11 @@ services:
       - POSTGRES_DB=kanbn
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kanbn -d kanbn"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     networks:
       - kanbn
 
