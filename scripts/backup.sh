@@ -1,13 +1,11 @@
 #!/bin/bash
 # Unified backup script for all services
-# Backs up to Google Cloud Storage via rclone + redundant copies to GitHub
+# Dumps databases/data, pushes to GitHub (10xdeca/xdeca-backups)
 # Usage: ./backup.sh [all|kanbn|outline|radicale]
 
 SERVICE=${1:-all}
 BACKUP_DIR="/tmp/backups"
 DATE=$(date +%Y-%m-%d)
-RCLONE_REMOTE="gcs"
-BUCKET="xdeca-backups"
 RETENTION_DAYS=7
 FAILED_SERVICES=()
 
@@ -75,24 +73,7 @@ backup_kanbn() {
   docker exec kanbn_postgres \
     pg_dump -U kanbn kanbn | gzip > "$backup_file"
 
-  # Upload to object storage
-  rclone copy "$backup_file" "$RCLONE_REMOTE:$BUCKET/kanbn/"
-
   log "Kan.bn backup complete: kanbn-$DATE.sql.gz"
-}
-
-backup_gremlin() {
-  log "Backing up gremlin..."
-
-  local backup_file="$BACKUP_DIR/pm-bot-$DATE.db"
-
-  # Copy SQLite database from container volume
-  docker cp gremlin:/app/data/kan-bot.db "$backup_file"
-
-  # Upload to object storage
-  rclone copy "$backup_file" "$RCLONE_REMOTE:$BUCKET/pm-bot/"
-
-  log "gremlin backup complete: pm-bot-$DATE.db"
 }
 
 backup_outline() {
@@ -103,9 +84,6 @@ backup_outline() {
   # Dump PostgreSQL
   docker exec outline_postgres \
     pg_dump -U outline outline | gzip > "$backup_file"
-
-  # Upload to object storage
-  rclone copy "$backup_file" "$RCLONE_REMOTE:$BUCKET/outline/"
 
   log "Outline backup complete: outline-$DATE.sql.gz"
 }
@@ -118,10 +96,18 @@ backup_radicale() {
   # Tar the collections from the Docker volume
   docker exec radicale tar czf - /data/collections > "$backup_file"
 
-  # Upload to object storage
-  rclone copy "$backup_file" "$RCLONE_REMOTE:$BUCKET/radicale/"
-
   log "Radicale backup complete: radicale-$DATE.tar.gz"
+}
+
+backup_gremlin() {
+  log "Backing up gremlin..."
+
+  local backup_file="$BACKUP_DIR/gremlin-$DATE.db"
+
+  # Copy SQLite database from container volume
+  docker cp gremlin:/app/data/gremlin.db "$backup_file"
+
+  log "gremlin backup complete: gremlin-$DATE.db"
 }
 
 backup_to_github() {
@@ -155,10 +141,7 @@ backup_to_github() {
     }
   fi
 
-  # Remove old compressed files from GitHub dir (one-time migration cleanup)
-  rm -f "$GITHUB_BACKUP_DIR"/*.sql.gz "$GITHUB_BACKUP_DIR"/*.tar.gz
-
-  # Copy each service dump, decompressing where possible so git deltas work
+  # Copy each service dump, decompressing so git deltas work
   for svc in "${services[@]}"; do
     local dump
     dump=$(find "$BACKUP_DIR" -name "${svc}-${DATE}.*" -type f 2>/dev/null | head -1)
@@ -203,21 +186,8 @@ backup_to_github() {
 }
 
 cleanup_old_backups() {
-  log "Cleaning up backups older than $RETENTION_DAYS days..."
-
-  # Clean local temp backups
+  log "Cleaning up local backups older than $RETENTION_DAYS days..."
   find "$BACKUP_DIR" -type f -mtime +$RETENTION_DAYS -delete 2>/dev/null || true
-
-  # Clean remote backups (rclone delete with min-age)
-  rclone delete "$RCLONE_REMOTE:$BUCKET/kanbn/" \
-    --min-age "${RETENTION_DAYS}d" 2>/dev/null || true
-  rclone delete "$RCLONE_REMOTE:$BUCKET/outline/" \
-    --min-age "${RETENTION_DAYS}d" 2>/dev/null || true
-  rclone delete "$RCLONE_REMOTE:$BUCKET/pm-bot/" \
-    --min-age "${RETENTION_DAYS}d" 2>/dev/null || true
-  rclone delete "$RCLONE_REMOTE:$BUCKET/radicale/" \
-    --min-age "${RETENTION_DAYS}d" 2>/dev/null || true
-
   log "Cleanup complete"
 }
 
@@ -225,8 +195,8 @@ cleanup_old_backups() {
 case $SERVICE in
   all)
     SUCCEEDED=()
-    for svc in kanbn outline radicale pm-bot; do
-      if "backup_${svc//-/_}"; then
+    for svc in kanbn outline radicale gremlin; do
+      if "backup_${svc}"; then
         SUCCEEDED+=("$svc")
       else
         error "$svc backup failed"
@@ -247,8 +217,8 @@ case $SERVICE in
   radicale)
     backup_radicale && backup_to_github radicale || FAILED_SERVICES+=(radicale)
     ;;
-  gremlin|pm-bot)
-    backup_gremlin && backup_to_github pm-bot || FAILED_SERVICES+=(gremlin)
+  gremlin)
+    backup_gremlin && backup_to_github gremlin || FAILED_SERVICES+=(gremlin)
     ;;
   cleanup)
     cleanup_old_backups

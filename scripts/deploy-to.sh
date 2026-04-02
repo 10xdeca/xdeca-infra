@@ -56,45 +56,6 @@ deploy_service() {
 deploy_backups() {
     echo "Deploying backup configuration..."
 
-    local BACKUP_SECRETS="$REPO_ROOT/backups/secrets.yaml"
-
-    if [ ! -f "$BACKUP_SECRETS" ]; then
-        echo "WARNING: No backups/secrets.yaml found. Skipping backup setup."
-        return 0
-    fi
-
-    # Decrypt and extract GCS config
-    echo "Extracting GCS configuration..."
-    local GCS_BUCKET
-    local GCS_PROJECT
-    GCS_BUCKET=$(sops -d "$BACKUP_SECRETS" | yq -r '.gcs_bucket')
-    GCS_PROJECT=$(sops -d "$BACKUP_SECRETS" | yq -r '.gcs_project')
-
-    if [ -z "$GCS_BUCKET" ] || [ "$GCS_BUCKET" = "null" ]; then
-        echo "ERROR: Invalid backup secrets. Check backups/secrets.yaml"
-        return 1
-    fi
-
-    # Generate rclone config for Google Cloud Storage
-    # Uses GCE instance service account — no credentials needed
-    echo "Generating rclone configuration (GCS)..."
-    cat > /tmp/rclone.conf << EOF
-[gcs]
-type = google cloud storage
-project_number = $GCS_PROJECT
-bucket_policy_only = true
-EOF
-
-    # Deploy rclone config
-    ssh "$REMOTE" "mkdir -p ~/.config/rclone"
-    scp /tmp/rclone.conf "$REMOTE":~/.config/rclone/rclone.conf
-    ssh "$REMOTE" "chmod 600 ~/.config/rclone/rclone.conf"
-    rm /tmp/rclone.conf
-
-    # Create GCS bucket if it doesn't exist
-    echo "Ensuring GCS bucket exists..."
-    ssh "$REMOTE" "rclone mkdir gcs:$GCS_BUCKET 2>/dev/null || true"
-
     # Deploy backup scripts
     echo "Deploying backup scripts..."
     ssh "$REMOTE" "sudo mkdir -p /opt/scripts"
@@ -103,14 +64,6 @@ EOF
     ssh "$REMOTE" "sudo mv /tmp/backup.sh /tmp/restore.sh /opt/scripts/"
     ssh "$REMOTE" "sudo chmod +x /opt/scripts/backup.sh /opt/scripts/restore.sh"
     ssh "$REMOTE" "sudo chown nick:nick /opt/scripts/*.sh"
-
-    # Test rclone connection
-    echo "Testing rclone connection..."
-    if ssh "$REMOTE" "rclone lsd gcs: 2>/dev/null"; then
-        echo "rclone connection successful!"
-    else
-        echo "Connection test failed - check GCE service account permissions"
-    fi
 
     # Ensure cron is installed and running
     if ! ssh "$REMOTE" "systemctl is-active cron > /dev/null 2>&1"; then
@@ -169,7 +122,6 @@ SSHEOF'
     echo ""
 
     echo "Backup configuration complete!"
-    echo "  - rclone config: ~/.config/rclone/rclone.conf (GCS via service account)"
     echo "  - GitHub backup: 10xdeca/xdeca-backups (private repo)"
     echo "  - Deploy key: ~/.ssh/xdeca-backups-deploy"
     echo "  - Scripts: /opt/scripts/backup.sh, /opt/scripts/restore.sh"
