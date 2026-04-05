@@ -9,13 +9,13 @@ Infrastructure monorepo for self-hosted services.
 | [Kan.bn](./kanbn/) | Kanban boards (Trello alternative) | tasks.xdeca.com |
 | [Outline](./outline/) | Team wiki (Notion alternative) | kb.xdeca.com |
 | MinIO | S3-compatible file storage | storage.xdeca.com |
-| [Caddy](./caddy/) | Reverse proxy with automatic HTTPS | - |
+| Caddy | Reverse proxy (managed by imagineering-infra, colocated) | - |
 
 ## Infrastructure
 
-| Provider | Status | Cost |
-|----------|--------|------|
-| GCP Compute Engine (e2-medium) | **Active** | ~$24/mo |
+| Provider | Status | IP | Cost |
+|----------|--------|-----|------|
+| OCI (Oracle Cloud) | **Active** | 34.116.110.7 | Free tier |
 
 ## Architecture
 

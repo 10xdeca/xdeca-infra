@@ -29,16 +29,20 @@ deploy_scripts() {
     rsync -avz "$REPO_ROOT/scripts/" "$REMOTE":/tmp/scripts/
     ssh "$REMOTE" "sudo mv /tmp/scripts/* /opt/scripts/ && sudo chmod +x /opt/scripts/*.sh"
 
-    # Set up health check cron
+    # Set up health check cron (uses Telegram for server alerts)
+    # Requires telegram_bot_token, telegram_chat_id, telegram_thread_id in gremlin/secrets.yaml
     local GREMLIN_SECRETS="$REPO_ROOT/gremlin/secrets.yaml"
-    if [ -f "$GREMLIN_SECRETS" ]; then
+    if [ -f "$GREMLIN_SECRETS" ] && sops -d "$GREMLIN_SECRETS" | yq -e '.telegram_bot_token' > /dev/null 2>&1; then
         echo "Setting up health check cron..."
-        local BOT_TOKEN
+        local BOT_TOKEN CHAT_ID THREAD_ID
         BOT_TOKEN=$(sops -d "$GREMLIN_SECRETS" | yq -r '.telegram_bot_token')
-        ssh "$REMOTE" "mkdir -p ~/logs && echo '0 * * * * nick TELEGRAM_BOT_TOKEN=$BOT_TOKEN TELEGRAM_CHAT_ID=-1002401283379 TELEGRAM_THREAD_ID=101 /opt/scripts/health-check.sh >> /home/nick/logs/health-check.log 2>&1' | sudo tee /etc/cron.d/xdeca-health-check > /dev/null"
+        CHAT_ID=$(sops -d "$GREMLIN_SECRETS" | yq -r '.telegram_chat_id')
+        THREAD_ID=$(sops -d "$GREMLIN_SECRETS" | yq -r '.telegram_thread_id')
+        ssh "$REMOTE" "mkdir -p ~/logs && echo '0 * * * * nick TELEGRAM_BOT_TOKEN=$BOT_TOKEN TELEGRAM_CHAT_ID=$CHAT_ID TELEGRAM_THREAD_ID=$THREAD_ID /opt/scripts/health-check.sh >> /home/nick/logs/health-check.log 2>&1' | sudo tee /etc/cron.d/xdeca-health-check > /dev/null"
         echo "Health check cron installed (hourly)"
     else
-        echo "WARNING: gremlin/secrets.yaml not found, skipping health check cron"
+        echo "NOTE: No Telegram credentials in gremlin/secrets.yaml, skipping health check cron"
+        echo "  Add telegram_bot_token, telegram_chat_id, telegram_thread_id to enable alerts"
     fi
 
     echo "Scripts deployed to /opt/scripts/"
@@ -77,12 +81,15 @@ deploy_backups() {
 
     local CRON_ENV=""
     local GREMLIN_SECRETS="$REPO_ROOT/gremlin/secrets.yaml"
-    if [ -f "$GREMLIN_SECRETS" ]; then
-        local BOT_TOKEN
+    if [ -f "$GREMLIN_SECRETS" ] && sops -d "$GREMLIN_SECRETS" | yq -e '.telegram_bot_token' > /dev/null 2>&1; then
+        local BOT_TOKEN CHAT_ID THREAD_ID
         BOT_TOKEN=$(sops -d "$GREMLIN_SECRETS" | yq -r '.telegram_bot_token')
-        CRON_ENV="TELEGRAM_BOT_TOKEN=$BOT_TOKEN TELEGRAM_CHAT_ID=-1002401283379 TELEGRAM_THREAD_ID=101 "
+        CHAT_ID=$(sops -d "$GREMLIN_SECRETS" | yq -r '.telegram_chat_id')
+        THREAD_ID=$(sops -d "$GREMLIN_SECRETS" | yq -r '.telegram_thread_id')
+        CRON_ENV="TELEGRAM_BOT_TOKEN=$BOT_TOKEN TELEGRAM_CHAT_ID=$CHAT_ID TELEGRAM_THREAD_ID=$THREAD_ID "
     else
-        echo "WARNING: gremlin/secrets.yaml not found, backup alerts won't be sent"
+        echo "WARNING: No Telegram credentials in gremlin/secrets.yaml, backup alerts won't be sent"
+        echo "  Add telegram_bot_token, telegram_chat_id, telegram_thread_id to enable alerts"
     fi
 
     ssh "$REMOTE" "echo '0 4 * * * nick ${CRON_ENV}/opt/scripts/backup.sh all >> /home/nick/logs/backup.log 2>&1' | sudo tee /etc/cron.d/xdeca-backup > /dev/null"

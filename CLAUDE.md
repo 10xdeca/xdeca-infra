@@ -6,20 +6,20 @@ Monorepo for xdeca infrastructure and self-hosted services.
 
 **DO NOT run repeated/rapid commands on the production server (34.116.110.7).**
 
-The GCE instance has moderate resources (4GB RAM, 2 vCPU) but running many `docker exec`, `docker logs`, or SSH commands in quick succession can still cause issues.
+The OCI instance has decent resources (24GB RAM, 4 vCPU) but running many `docker exec`, `docker logs`, or SSH commands in quick succession can still cause issues.
 
 **Instead:**
 - Set up a local dev environment to debug issues
 - Use `./scripts/deploy-to.sh` for deployments (tested, safe)
 - If you must debug production, run commands sparingly with pauses between them
-- To recover a crashed server: `gcloud compute instances reset xdeca-infra --zone=australia-southeast1-a`
+- To recover a crashed server: `oci compute instance action --action RESET --instance-id <xdeca-instance-ocid>`
 
 ## Structure
 
 ```
 .
-├── backups/            # Backup config (Google Cloud Storage)
-├── caddy/              # Reverse proxy (Caddy)
+├── backups/            # Backup config (GitHub)
+├── # caddy is managed by imagineering-infra (colocated on same OCI instance)
 ├── kanbn/              # Kanban boards (Trello alternative)
 ├── outline/            # Team wiki (Notion alternative)
 ├── radicale/           # CalDAV/CardDAV server
@@ -47,7 +47,7 @@ The GCE instance has moderate resources (4GB RAM, 2 vCPU) but running many `dock
 
 | Service | Port | URL | Description |
 |---------|------|-----|-------------|
-| Caddy | 80/443 | - | Reverse proxy, auto-TLS |
+| Caddy | 80/443 | - | Reverse proxy (managed by imagineering-infra) |
 | Kan.bn | 3003 | tasks.xdeca.com | Kanban boards (Trello-like) |
 | gremlin | - | Telegram | AI task assistant for Kan.bn |
 | Outline | 3002 | kb.xdeca.com | Team wiki (Notion-like) |
@@ -111,15 +111,13 @@ Each service has its own `docker-compose.yml` and isolated network. Caddy uses `
 - `kanbn/` - own network with postgres; uses shared MinIO via `storage.xdeca.com`
 - `radicale/` - standalone container; file-based storage in Docker volume
 - `gremlin/` - no docker network; talks to Kan.bn via public API, Telegram via polling
-- `caddy/` - `network_mode: host` to bind 80/443 directly
-
 **Shared resources:**
 - MinIO (from Outline stack) serves both Outline and Kan.bn file storage
-- Caddy routes all HTTPS traffic to backend services on localhost
+- Caddy (managed by imagineering-infra) routes all HTTPS traffic to backend services on localhost
 
 ## Backups
 
-Daily backups to Google Cloud Storage.
+Daily backups to GitHub (10xdeca/xdeca-backups).
 
 | Service | Schedule | Retention |
 |---------|----------|-----------|
@@ -141,7 +139,7 @@ Daily backups to Google Cloud Storage.
 
 | Provider | Status | IP | Cost |
 |----------|--------|-----|------|
-| GCP Compute Engine (e2-medium) | Active | 34.116.110.7 | ~$24/mo |
+| OCI (Oracle Cloud) | Active | 34.116.110.7 | Free tier |
 
 ## Secrets Management
 

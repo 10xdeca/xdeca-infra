@@ -6,6 +6,8 @@ SECRET_PATTERNS=(
   "kanbn/*.yaml"
   "outline/*.yaml"
   "backups/*.yaml"
+  "radicale/*.yaml"
+  "gremlin/*.yaml"
 )
 
 # Exclude example files

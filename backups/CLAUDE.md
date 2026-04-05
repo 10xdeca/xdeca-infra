@@ -1,6 +1,6 @@
 # Backups
 
-Automated backups to Google Cloud Storage.
+Automated backups to GitHub (10xdeca/xdeca-backups).
 
 ## Overview
 
@@ -27,9 +27,8 @@ sops -e -i secrets.yaml
 ```
 
 This will:
-- Deploy rclone config (GCS via GCE service account)
-- Create the backup bucket (if it doesn't exist)
 - Deploy backup/restore scripts
+- Configure GitHub deploy key for pushing backups
 - Set up daily cron job
 
 ## Manual Operations
@@ -39,14 +38,6 @@ This will:
 ```bash
 ssh ubuntu@34.116.110.7
 /opt/scripts/backup.sh all
-```
-
-### List Remote Backups
-
-```bash
-rclone ls gcs:xdeca-backups/
-rclone ls gcs:xdeca-backups/kanbn/
-rclone ls gcs:xdeca-backups/outline/
 ```
 
 ### Restore
@@ -67,6 +58,6 @@ See `docs/backups.md` for full restore procedures.
 
 | File | Purpose |
 |------|---------|
-| `secrets.yaml` | GCS configuration (encrypted) |
+| `secrets.yaml` | Telegram alerts config (encrypted) |
 | `scripts/backup.sh` | Backup script |
 | `scripts/restore.sh` | Restore script |

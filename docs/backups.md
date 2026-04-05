@@ -1,6 +1,6 @@
 # Backup & Restore
 
-All services backup to **AWS S3**.
+All services backup to **GitHub** (10xdeca/xdeca-backups).
 
 ## Overview
 
@@ -8,6 +8,8 @@ All services backup to **AWS S3**.
 |---------|------------------|----------|-----------|
 | Kan.bn | PostgreSQL database | Daily 4 AM | 7 days |
 | Outline | PostgreSQL database | Daily 4 AM | 7 days |
+| Radicale | CalDAV/CardDAV collections | Daily 4 AM | 7 days |
+| Gremlin | SQLite database | Daily 4 AM | 7 days |
 
 ## Manual Operations
 
@@ -20,14 +22,8 @@ All services backup to **AWS S3**.
 # Single service
 /opt/scripts/backup.sh kanbn
 /opt/scripts/backup.sh outline
-```
-
-### List Remote Backups
-
-```bash
-rclone ls s3:xdeca-backups/
-rclone ls s3:xdeca-backups/kanbn/
-rclone ls s3:xdeca-backups/outline/
+/opt/scripts/backup.sh radicale
+/opt/scripts/backup.sh gremlin
 ```
 
 ### Check Backup Logs
@@ -41,29 +37,31 @@ tail -f /var/log/backup.log
 ### Manual Restore
 
 ```bash
-# Restore latest backup
+# Restore latest backup (pulls from GitHub)
 /opt/scripts/restore.sh kanbn
 /opt/scripts/restore.sh outline
-
-# Restore specific date
-/opt/scripts/restore.sh kanbn 2024-01-15
-/opt/scripts/restore.sh outline 2024-01-15
+/opt/scripts/restore.sh radicale
+/opt/scripts/restore.sh gremlin
 ```
 
 ### Restore Process
 
-1. Script downloads backup from S3
+1. Script clones backup repo from GitHub (shallow)
 2. Stops the service
-3. Drops and recreates database
-4. Restores PostgreSQL dump
+3. Drops and recreates database (or restores files)
+4. Restores PostgreSQL dump (or tar archive)
 5. Restarts the service
 
-## Backup File Locations
+## Backup Files in GitHub Repo
 
-| Service | Remote Path | Contents |
-|---------|-------------|----------|
-| Kan.bn | `xdeca-backups/kanbn/` | `kanbn-YYYY-MM-DD.sql.gz` |
-| Outline | `xdeca-backups/outline/` | `outline-YYYY-MM-DD.sql.gz` |
+| Service | File | Contents |
+|---------|------|----------|
+| Kan.bn | `kanbn.sql` | Decompressed PostgreSQL dump |
+| Outline | `outline.sql` | Decompressed PostgreSQL dump |
+| Radicale | `radicale.tar` | Decompressed collections archive |
+| Gremlin | `gremlin.db` | SQLite database |
+
+Files are stored decompressed so git deltas work efficiently.
 
 ## Troubleshooting
 
@@ -77,12 +75,12 @@ cat /etc/cron.d/backup
 tail -50 /var/log/backup.log
 ```
 
-### rclone connection issues?
+### GitHub push failing?
 
 ```bash
-# Test connection
-rclone lsd s3:
+# Test deploy key
+ssh -T git@github-backups
 
-# Check config
-cat ~/.config/rclone/rclone.conf
+# Check key exists
+ls -la ~/.ssh/xdeca-backups-deploy
 ```
