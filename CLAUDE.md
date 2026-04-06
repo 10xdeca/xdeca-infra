@@ -4,7 +4,7 @@ Monorepo for xdeca infrastructure and self-hosted services.
 
 ## IMPORTANT: Production Server Safety
 
-**DO NOT run repeated/rapid commands on the production server (34.116.110.7).**
+**DO NOT run repeated/rapid commands on the production server (149.118.69.221).**
 
 The OCI instance has decent resources (24GB RAM, 4 vCPU) but running many `docker exec`, `docker logs`, or SSH commands in quick succession can still cause issues.
 
@@ -139,7 +139,7 @@ Daily backups to GitHub (10xdeca/xdeca-backups).
 
 | Provider | Status | IP | Cost |
 |----------|--------|-----|------|
-| OCI (Oracle Cloud) | Active | 34.116.110.7 | Free tier |
+| OCI (Oracle Cloud) | Active | 149.118.69.221 | Free tier |
 
 ## Secrets Management
 
@@ -194,7 +194,7 @@ Self-hosted team wiki (Notion alternative). Real-time collaboration with edit hi
 
 ```bash
 # Deploy (secrets auto-decrypted)
-./scripts/deploy-to.sh 34.116.110.7 outline
+./scripts/deploy-to.sh 149.118.69.221 outline
 ```
 
 First user to sign up becomes admin. Invite team members from Settings → Members.
@@ -255,7 +255,7 @@ Kan.bn has built-in Trello import via OAuth. To import:
 
 ```bash
 # Deploy (builds from source, secrets auto-decrypted)
-./scripts/deploy-to.sh 34.116.110.7 kanbn
+./scripts/deploy-to.sh 149.118.69.221 kanbn
 ```
 
 First user to sign up becomes admin.
@@ -281,10 +281,10 @@ Self-hosted CalDAV/CardDAV server for team calendars and contacts.
 
 ```bash
 # Deploy (secrets auto-decrypted, htpasswd generated)
-./scripts/deploy-to.sh 34.116.110.7 radicale
+./scripts/deploy-to.sh 149.118.69.221 radicale
 
 # Also redeploy Caddy to pick up the new route
-./scripts/deploy-to.sh 34.116.110.7 caddy
+./scripts/deploy-to.sh 149.118.69.221 caddy
 
 # Test
 curl -u nick:password https://dav.xdeca.com/.well-known/caldav
@@ -326,8 +326,8 @@ Telegram bot for Kan.bn task management. Uses Claude AI for natural language int
 
 ```bash
 # Deploy (source from https://github.com/10xdeca/gremlin)
-./scripts/deploy-to.sh 34.116.110.7 gremlin
+./scripts/deploy-to.sh 149.118.69.221 gremlin
 
 # Check logs
-ssh 34.116.110.7 'docker logs -f gremlin'
+ssh 149.118.69.221 'docker logs -f gremlin'
 ```

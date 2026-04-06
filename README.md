@@ -15,7 +15,7 @@ Infrastructure monorepo for self-hosted services.
 
 | Provider | Status | IP | Cost |
 |----------|--------|-----|------|
-| OCI (Oracle Cloud) | **Active** | 34.116.110.7 | Free tier |
+| OCI (Oracle Cloud) | **Active** | 149.118.69.221 | Free tier |
 
 ## Architecture
 
@@ -44,7 +44,7 @@ age-keygen -o ~/.config/sops/age/keys.txt
 ### 2. Deploy services
 
 ```bash
-./scripts/deploy-to.sh 34.116.110.7 all
+./scripts/deploy-to.sh 149.118.69.221 all
 ```
 
 ## Repository Structure

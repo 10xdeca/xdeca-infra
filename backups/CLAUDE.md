@@ -36,7 +36,7 @@ This will:
 ### Run Backup
 
 ```bash
-ssh ubuntu@34.116.110.7
+ssh nick@149.118.69.221
 /opt/scripts/backup.sh all
 ```
 
