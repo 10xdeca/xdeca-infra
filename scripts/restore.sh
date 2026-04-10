@@ -57,7 +57,7 @@ restore_kanbn() {
   fi
 
   # Ensure Kan.bn postgres is running
-  cd ~/apps/xdeca-kanbn
+  cd ~/apps/imagineering-kanbn
   docker compose up -d postgres
   log "Waiting for PostgreSQL to start..."
   sleep 10
@@ -90,7 +90,7 @@ restore_outline() {
   fi
 
   # Ensure Outline postgres is running
-  cd ~/apps/xdeca-outline
+  cd ~/apps/imagineering-outline
   docker compose up -d postgres
   log "Waiting for PostgreSQL to start..."
   sleep 10
@@ -127,7 +127,7 @@ restore_gremlin() {
   docker cp "$BACKUP_FILE" gremlin:/app/data/gremlin.db
 
   log "Restarting gremlin..."
-  cd ~/apps/xdeca-gremlin
+  cd ~/apps/imagineering-gremlin
   docker compose restart
 
   cleanup_backups
@@ -151,7 +151,7 @@ restore_minio() {
 
   # Stop MinIO to avoid conflicts during restore
   log "Stopping MinIO..."
-  cd ~/apps/xdeca-outline
+  cd ~/apps/imagineering-outline
   docker compose stop minio
 
   # Restore bucket data into the MinIO volume
@@ -191,7 +191,7 @@ restore_radicale() {
 
   # Stop Radicale
   log "Stopping Radicale..."
-  cd ~/apps/xdeca-radicale
+  cd ~/apps/imagineering-radicale
   docker compose stop radicale
 
   # Restore collections into the container volume

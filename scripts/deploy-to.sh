@@ -19,7 +19,7 @@ IP=$1
 SERVICE=${2:-all}
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 REMOTE="nick@$IP"
-APP_PREFIX="xdeca-"
+APP_PREFIX="imagineering-"
 
 echo "Deploying to $REMOTE..."
 

@@ -67,6 +67,7 @@ services:
 
 volumes:
   postgres_data:
+    name: kanbn_postgres_data
 
 networks:
   kanbn:
