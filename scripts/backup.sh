@@ -1,7 +1,7 @@
 #!/bin/bash
 # Unified backup script for all services
 # Dumps databases/data, pushes to GitHub (10xdeca/xdeca-backups)
-# Usage: ./backup.sh [all|kanbn|outline|radicale]
+# Usage: ./backup.sh [all|kanbn|outline|radicale|minio]
 
 SERVICE=${1:-all}
 BACKUP_DIR="/tmp/backups"
@@ -91,12 +91,14 @@ backup_outline() {
 backup_radicale() {
   log "Backing up Radicale..."
 
-  local backup_file="$BACKUP_DIR/radicale-$DATE.tar.gz"
+  local backup_dir="$BACKUP_DIR/radicale-$DATE"
 
-  # Tar the collections from the Docker volume
-  docker exec radicale tar czf - /data/collections > "$backup_file"
+  # Copy raw .ics/.vcf files so git can diff them as text
+  rm -rf "$backup_dir"
+  mkdir -p "$backup_dir"
+  docker cp radicale:/data/collections/. "$backup_dir/"
 
-  log "Radicale backup complete: radicale-$DATE.tar.gz"
+  log "Radicale backup complete: radicale-$DATE/"
 }
 
 backup_gremlin() {
@@ -110,39 +112,129 @@ backup_gremlin() {
   log "gremlin backup complete: gremlin-$DATE.db"
 }
 
-backup_to_github() {
-  local services=("$@")
+backup_minio() {
+  log "Backing up MinIO buckets..."
 
-  # Check prerequisites
+  local backup_file="$BACKUP_DIR/minio-$DATE.tar.gz"
+
+  # Tar all bucket data (avatars, attachments, outline uploads) from the MinIO container
+  # Excludes .minio.sys (internal metadata that MinIO regenerates on startup)
+  docker exec outline_minio tar czf - \
+    --exclude='.minio.sys' \
+    -C /data . > "$backup_file"
+
+  log "MinIO backup complete: minio-$DATE.tar.gz"
+}
+
+check_github_prereqs() {
   if ! command -v git &> /dev/null; then
     error "git not installed, skipping GitHub backup"
-    return 0
+    return 1
   fi
   if [ ! -f "$HOME/.ssh/xdeca-backups-deploy" ]; then
     error "Deploy key not found at ~/.ssh/xdeca-backups-deploy, skipping GitHub backup"
-    return 0
+    return 1
   fi
+  return 0
+}
 
-  log "Pushing backups to GitHub..."
-
-  # Clone or pull the backup repo (shallow)
+clone_backup_repo() {
+  local branch="${1:-main}"
   if [ -d "$GITHUB_BACKUP_DIR/.git" ]; then
-    git -C "$GITHUB_BACKUP_DIR" pull --rebase 2>/dev/null || {
+    git -C "$GITHUB_BACKUP_DIR" fetch origin "$branch" 2>/dev/null &&
+    git -C "$GITHUB_BACKUP_DIR" checkout "$branch" 2>/dev/null &&
+    git -C "$GITHUB_BACKUP_DIR" reset --hard "origin/$branch" 2>/dev/null || {
       rm -rf "$GITHUB_BACKUP_DIR"
-      git clone --depth 1 "$GITHUB_BACKUP_REPO" "$GITHUB_BACKUP_DIR"
+      git clone --depth 1 --branch "$branch" "$GITHUB_BACKUP_REPO" "$GITHUB_BACKUP_DIR" 2>/dev/null
     }
   else
     rm -rf "$GITHUB_BACKUP_DIR"
-    git clone --depth 1 "$GITHUB_BACKUP_REPO" "$GITHUB_BACKUP_DIR" 2>/dev/null || {
-      # First push — repo may be empty
-      mkdir -p "$GITHUB_BACKUP_DIR"
-      git -C "$GITHUB_BACKUP_DIR" init -b main
-      git -C "$GITHUB_BACKUP_DIR" remote add origin "$GITHUB_BACKUP_REPO"
-    }
+    git clone --depth 1 --branch "$branch" "$GITHUB_BACKUP_REPO" "$GITHUB_BACKUP_DIR" 2>/dev/null
+  fi
+}
+
+# Push binary blobs (MinIO) to an orphan branch — force-pushed each time
+# so binary data doesn't accumulate in git history
+backup_minio_to_github() {
+  check_github_prereqs || return 0
+
+  local dump
+  dump=$(find "$BACKUP_DIR" -name "minio-${DATE}.*" -type f 2>/dev/null | head -1)
+  if [ -z "$dump" ] || [ ! -f "$dump" ]; then
+    error "Dump file not found for minio (expected minio-${DATE}.*)"
+    return 0
   fi
 
-  # Copy each service dump, decompressing so git deltas work
+  log "Pushing MinIO backup to GitHub (minio branch, force-push)..."
+
+  rm -rf "$GITHUB_BACKUP_DIR"
+  mkdir -p "$GITHUB_BACKUP_DIR"
+  git -C "$GITHUB_BACKUP_DIR" init -b minio
+  git -C "$GITHUB_BACKUP_DIR" remote add origin "$GITHUB_BACKUP_REPO"
+
+  gunzip -c "$dump" > "$GITHUB_BACKUP_DIR/minio.tar"
+  log "Decompressed minio backup → minio.tar"
+
+  git -C "$GITHUB_BACKUP_DIR" add -A
+  git -C "$GITHUB_BACKUP_DIR" \
+    -c user.name="xdeca-backup" \
+    -c user.email="backup@xdeca.com" \
+    commit -m "minio backup $DATE"
+  git -C "$GITHUB_BACKUP_DIR" push --force origin minio
+  log "MinIO backup pushed to GitHub (minio branch)"
+
+  check_repo_size
+}
+
+# Push text-diffable backups (databases) to main — history preserved
+# so deleted data can be recovered from older commits
+backup_to_github() {
+  local services=("$@")
+
+  # Separate minio from other services
+  local db_services=()
+  local has_minio=false
   for svc in "${services[@]}"; do
+    if [ "$svc" = "minio" ]; then
+      has_minio=true
+    else
+      db_services+=("$svc")
+    fi
+  done
+
+  # Push MinIO to its own force-pushed branch
+  if [ "$has_minio" = true ]; then
+    backup_minio_to_github
+  fi
+
+  # Push database backups to main (with history)
+  if [ ${#db_services[@]} -eq 0 ]; then
+    return 0
+  fi
+
+  check_github_prereqs || return 0
+
+  log "Pushing database backups to GitHub (main branch)..."
+
+  clone_backup_repo main || {
+    # First push — repo may be empty
+    rm -rf "$GITHUB_BACKUP_DIR"
+    mkdir -p "$GITHUB_BACKUP_DIR"
+    git -C "$GITHUB_BACKUP_DIR" init -b main
+    git -C "$GITHUB_BACKUP_DIR" remote add origin "$GITHUB_BACKUP_REPO"
+  }
+
+  # Copy each service dump into the backup repo
+  for svc in "${db_services[@]}"; do
+    # Radicale is backed up as a raw directory of .ics/.vcf files
+    local dump_dir="$BACKUP_DIR/${svc}-${DATE}"
+    if [ -d "$dump_dir" ]; then
+      rm -rf "$GITHUB_BACKUP_DIR/${svc}"
+      cp -a "$dump_dir" "$GITHUB_BACKUP_DIR/${svc}"
+      log "Copied $svc backup → ${svc}/"
+      continue
+    fi
+
     local dump
     dump=$(find "$BACKUP_DIR" -name "${svc}-${DATE}.*" -type f 2>/dev/null | head -1)
 
@@ -155,10 +247,6 @@ backup_to_github() {
       *.sql.gz)
         gunzip -c "$dump" > "$GITHUB_BACKUP_DIR/${svc}.sql"
         log "Decompressed $svc backup → ${svc}.sql"
-        ;;
-      *.tar.gz)
-        gunzip -c "$dump" > "$GITHUB_BACKUP_DIR/${svc}.tar"
-        log "Decompressed $svc backup → ${svc}.tar"
         ;;
       *)
         local ext="${dump##*.}"
@@ -195,7 +283,7 @@ cleanup_old_backups() {
 case $SERVICE in
   all)
     SUCCEEDED=()
-    for svc in kanbn outline radicale gremlin; do
+    for svc in kanbn outline radicale gremlin minio; do
       if "backup_${svc}"; then
         SUCCEEDED+=("$svc")
       else
@@ -220,11 +308,14 @@ case $SERVICE in
   gremlin)
     backup_gremlin && backup_to_github gremlin || FAILED_SERVICES+=(gremlin)
     ;;
+  minio)
+    backup_minio && backup_to_github minio || FAILED_SERVICES+=(minio)
+    ;;
   cleanup)
     cleanup_old_backups
     ;;
   *)
-    echo "Usage: $0 [all|kanbn|outline|radicale|gremlin|cleanup]"
+    echo "Usage: $0 [all|kanbn|outline|radicale|gremlin|minio|cleanup]"
     exit 1
     ;;
 esac

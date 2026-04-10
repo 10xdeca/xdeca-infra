@@ -2,7 +2,7 @@
 # Restore script for all services
 # Restores from GitHub backup repo (10xdeca/xdeca-backups)
 # Usage: ./restore.sh <service>
-#   service: kanbn, outline, radicale, gremlin
+#   service: kanbn, outline, radicale, gremlin, minio
 
 set -e
 
@@ -22,7 +22,7 @@ error() { echo -e "${RED}[$(date '+%Y-%m-%d %H:%M:%S')] ERROR:${NC} $1" >&2; }
 
 if [ -z "$SERVICE" ]; then
   echo "Usage: $0 <service>"
-  echo "  service: kanbn, outline, radicale, gremlin"
+  echo "  service: kanbn, outline, radicale, gremlin, minio"
   echo ""
   echo "Examples:"
   echo "  $0 kanbn    # Restore latest from GitHub backup"
@@ -134,16 +134,59 @@ restore_gremlin() {
   log "gremlin restore complete!"
 }
 
+restore_minio() {
+  log "Restoring MinIO buckets..."
+
+  # MinIO backups live on the 'minio' branch (force-pushed, no history)
+  log "Fetching MinIO backup from GitHub (minio branch)..."
+  rm -rf "$BACKUP_CLONE_DIR"
+  git clone --depth 1 --branch minio "$GITHUB_BACKUP_REPO" "$BACKUP_CLONE_DIR"
+
+  local BACKUP_FILE="$BACKUP_CLONE_DIR/minio.tar"
+  if [ ! -f "$BACKUP_FILE" ]; then
+    error "No minio.tar found in backup repo"
+    cleanup_backups
+    exit 1
+  fi
+
+  # Stop MinIO to avoid conflicts during restore
+  log "Stopping MinIO..."
+  cd ~/apps/xdeca-outline
+  docker compose stop minio
+
+  # Restore bucket data into the MinIO volume
+  # Copies into /data, preserving bucket directory structure
+  log "Restoring bucket data..."
+  docker compose run --rm --entrypoint sh \
+    -v "$BACKUP_FILE:/restore.tar:ro" minio \
+    -c "tar xf /restore.tar -C /data"
+
+  # Start MinIO
+  log "Starting MinIO..."
+  docker compose up -d minio
+
+  cleanup_backups
+  log "MinIO restore complete!"
+}
+
 restore_radicale() {
   log "Restoring Radicale..."
 
   fetch_backups
 
-  local BACKUP_FILE="$BACKUP_CLONE_DIR/radicale.tar"
-  if [ ! -f "$BACKUP_FILE" ]; then
-    error "No radicale.tar found in backup repo"
-    cleanup_backups
-    exit 1
+  local BACKUP_DIR_RAD="$BACKUP_CLONE_DIR/radicale"
+  if [ ! -d "$BACKUP_DIR_RAD" ]; then
+    # Fall back to legacy tar format
+    local BACKUP_FILE="$BACKUP_CLONE_DIR/radicale.tar"
+    if [ ! -f "$BACKUP_FILE" ]; then
+      error "No radicale/ directory or radicale.tar found in backup repo"
+      cleanup_backups
+      exit 1
+    fi
+    log "Restoring from legacy tar format..."
+    BACKUP_DIR_RAD="$RESTORE_DIR/radicale-extracted"
+    mkdir -p "$BACKUP_DIR_RAD"
+    tar xf "$BACKUP_FILE" -C "$BACKUP_DIR_RAD"
   fi
 
   # Stop Radicale
@@ -151,10 +194,9 @@ restore_radicale() {
   cd ~/apps/xdeca-radicale
   docker compose stop radicale
 
-  # Restore collections into the volume
+  # Restore collections into the container volume
   log "Restoring collections..."
-  docker compose run --rm --entrypoint sh -v "$BACKUP_FILE:/restore.tar:ro" radicale \
-    -c "rm -rf /data/collections && tar xf /restore.tar -C /"
+  docker cp "$BACKUP_DIR_RAD/." radicale:/data/collections/
 
   # Start Radicale
   log "Starting Radicale..."
@@ -178,9 +220,12 @@ case $SERVICE in
   gremlin)
     restore_gremlin
     ;;
+  minio)
+    restore_minio
+    ;;
   *)
     error "Unknown service: $SERVICE"
-    echo "Valid services: kanbn, outline, radicale, gremlin"
+    echo "Valid services: kanbn, outline, radicale, gremlin, minio"
     exit 1
     ;;
 esac
