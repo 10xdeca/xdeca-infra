@@ -15,7 +15,7 @@ set -euo pipefail
 if [ $# -lt 2 ]; then
     echo "Usage: $0 <lightsail-ip> <gce-ip>"
     echo "  lightsail-ip: Source server (e.g. 13.54.159.183)"
-    echo "  gce-ip:       Destination GCE instance (e.g. 34.116.110.7)"
+    echo "  gce-ip:       Destination instance (e.g. 149.118.69.221)"
     exit 1
 fi
 
