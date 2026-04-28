@@ -104,8 +104,16 @@ backup_gremlin() {
 
   local backup_file="$BACKUP_DIR/gremlin-$DATE.db"
 
-  # Copy SQLite database from container volume
-  docker cp gremlin:/app/data/gremlin.db "$backup_file"
+  # Copy SQLite database from local container volume
+  docker cp gremlin:/app/data/gremlin.db "$backup_file" || {
+    error "Failed to docker cp gremlin.db — is the container running?"
+    return 1
+  }
+
+  if [ ! -s "$backup_file" ]; then
+    error "gremlin.db backup file is empty"
+    return 1
+  fi
 
   log "gremlin backup complete: gremlin-$DATE.db"
 }
@@ -195,7 +203,9 @@ cleanup_old_backups() {
 case $SERVICE in
   all)
     SUCCEEDED=()
-    for svc in kanbn outline radicale gremlin; do
+    # gremlin omitted: hibernating since 2026-04-27 (no container to back up).
+    # Re-add when waking gremlin per gremlin/CLAUDE.md wake-up runbook.
+    for svc in kanbn outline radicale; do
       if "backup_${svc}"; then
         SUCCEEDED+=("$svc")
       else
@@ -231,6 +241,7 @@ esac
 
 if [ ${#FAILED_SERVICES[@]} -gt 0 ]; then
   error "Backups failed for: ${FAILED_SERVICES[*]}"
+  send_telegram_alert "$(printf '<b>Backup Failure</b>\nFailed services: %s\nDate: %s' "${FAILED_SERVICES[*]}" "$DATE")"
   exit 1
 fi
 
