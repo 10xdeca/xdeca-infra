@@ -37,7 +37,13 @@ if [ "$swap_total" -gt 0 ]; then
 fi
 
 # Check for unhealthy Docker containers
+# Skip known one-shot init containers that exit cleanly by design:
+#   - names ending in -migrate or -setup (e.g. kanbn-migrate, outline_minio_setup)
+#   - names starting with img- (e.g. img-outline-minio_setup, img-kanbn-migrate)
 while read -r name status; do
+    if [[ "$name" =~ -(migrate|setup)$ || "$name" =~ ^img- ]]; then
+        continue
+    fi
     issues+=("Container *${name}*: ${status}")
 done < <(docker ps -a --filter "status=exited" --filter "status=restarting" --format "{{.Names}} {{.Status}}" 2>/dev/null)
 
