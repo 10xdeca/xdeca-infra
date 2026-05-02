@@ -1,10 +1,35 @@
 #!/bin/bash
-# Server health check - sends Telegram alerts when thresholds are exceeded
-# Runs hourly via cron. Requires env vars: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, TELEGRAM_THREAD_ID
+# Server health check - sends Telegram alerts when thresholds are exceeded.
+# Runs hourly via cron. Telegram credentials are loaded from
+# /etc/downstream-secrets/telegram.env by the shared helper below — they are
+# no longer inlined into the cron entry (avoids leaking the bot token in a
+# world-readable /etc/cron.d/ file).
+
+# Source shared Telegram helper (defines send_telegram_alert + loads creds).
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/telegram.sh
+. "$SCRIPT_DIR/lib/telegram.sh"
 
 DISK_THRESHOLD=80
 MEMORY_THRESHOLD=90
 SWAP_THRESHOLD=50
+
+# downstream-server health: alert if .auditLogEntries (the monotonic
+# persisted-record counter) drops below the previous observed value
+# (suggests data loss like the 2026-04-29 incident) or below an absolute
+# floor. The "previous value" is persisted between runs.
+#
+# Why .auditLogEntries and not .requests.total: investigation 2026-05-01
+# showed .requests.total is the sum of byStatus (point-in-time queue
+# depth), which drops on every drain — exactly the wrong shape for a
+# data-loss canary. .auditLogEntries is the actual monotonic counter and
+# is the right field. The state file was renamed to make the field
+# semantically clear; an old downstream-prev-total file from the previous
+# canary may exist and is harmless.
+DOWNSTREAM_HEALTH_URL="https://api.downstream-storage.cc/api/health"
+DOWNSTREAM_STATE_DIR="$HOME/.health-state"
+DOWNSTREAM_PREV_FILE="$DOWNSTREAM_STATE_DIR/downstream-prev-audit-entries"
+DOWNSTREAM_MIN_AUDIT=100
 
 issues=()
 
@@ -12,7 +37,7 @@ issues=()
 while read -r usage mount; do
     pct=${usage%\%}
     if [ "$pct" -gt "$DISK_THRESHOLD" ]; then
-        issues+=("Disk ${mount}: ${pct}% used \\(threshold: ${DISK_THRESHOLD}%\\)")
+        issues+=("Disk ${mount}: ${pct}% used (threshold: ${DISK_THRESHOLD}%)")
     fi
 done < <(df -h --output=pcent,target -x tmpfs -x devtmpfs -x overlay | tail -n +2 | awk '{print $1, $2}')
 
@@ -22,7 +47,7 @@ mem_available=$(awk '/MemAvailable/ {print $2}' /proc/meminfo)
 if [ "$mem_total" -gt 0 ]; then
     mem_used_pct=$(( (mem_total - mem_available) * 100 / mem_total ))
     if [ "$mem_used_pct" -gt "$MEMORY_THRESHOLD" ]; then
-        issues+=("Memory: ${mem_used_pct}% used \\(threshold: ${MEMORY_THRESHOLD}%\\)")
+        issues+=("Memory: ${mem_used_pct}% used (threshold: ${MEMORY_THRESHOLD}%)")
     fi
 fi
 
@@ -32,7 +57,7 @@ swap_free=$(awk '/SwapFree/ {print $2}' /proc/meminfo)
 if [ "$swap_total" -gt 0 ]; then
     swap_used_pct=$(( (swap_total - swap_free) * 100 / swap_total ))
     if [ "$swap_used_pct" -gt "$SWAP_THRESHOLD" ]; then
-        issues+=("Swap: ${swap_used_pct}% used \\(threshold: ${SWAP_THRESHOLD}%\\)")
+        issues+=("Swap: ${swap_used_pct}% used (threshold: ${SWAP_THRESHOLD}%)")
     fi
 fi
 
@@ -45,8 +70,35 @@ while read -r name status; do
     if [[ "$name" =~ [_-](migrate|setup)$ || "$name" =~ ^img- ]]; then
         continue
     fi
-    issues+=("Container *${name}*: ${status}")
+    issues+=("Container <b>${name}</b>: ${status}")
 done < <(docker ps -a --filter "status=exited" --filter "status=restarting" --format "{{.Names}} {{.Status}}" 2>/dev/null)
+
+# Check downstream-server data-loss canary (auditLogEntries is monotonic).
+mkdir -p "$DOWNSTREAM_STATE_DIR"
+ds_response=$(curl -sS --max-time 10 "$DOWNSTREAM_HEALTH_URL" 2>/dev/null)
+ds_curl_rc=$?
+if [ "$ds_curl_rc" -ne 0 ] || [ -z "$ds_response" ]; then
+    issues+=("downstream-server: /api/health unreachable (curl rc=${ds_curl_rc})")
+elif ! ds_audit=$(echo "$ds_response" | jq -e '.auditLogEntries' 2>/dev/null); then
+    issues+=("downstream-server: /api/health returned unexpected JSON (no .auditLogEntries)")
+else
+    # Absolute floor.
+    if [ "$ds_audit" -lt "$DOWNSTREAM_MIN_AUDIT" ]; then
+        issues+=("downstream-server: auditLogEntries=${ds_audit} below floor ${DOWNSTREAM_MIN_AUDIT}")
+    fi
+    # Drop vs previous snapshot.
+    if [ -f "$DOWNSTREAM_PREV_FILE" ]; then
+        ds_prev=$(cat "$DOWNSTREAM_PREV_FILE" 2>/dev/null)
+        if [ -n "$ds_prev" ] && [ "$ds_audit" -lt "$ds_prev" ]; then
+            issues+=("downstream-server: auditLogEntries dropped ${ds_prev} → ${ds_audit}")
+        fi
+    fi
+    # Persist the new high-water mark (only ratchet up, so a transient drop
+    # still alerts on the next run rather than silently re-baselining low).
+    if [ ! -f "$DOWNSTREAM_PREV_FILE" ] || [ "$ds_audit" -gt "$(cat "$DOWNSTREAM_PREV_FILE" 2>/dev/null || echo 0)" ]; then
+        echo "$ds_audit" > "$DOWNSTREAM_PREV_FILE"
+    fi
+fi
 
 # Send alert if any issues found
 if [ ${#issues[@]} -gt 0 ]; then
@@ -56,22 +108,30 @@ if [ ${#issues[@]} -gt 0 ]; then
         exit 1
     fi
 
+    # Build HTML message body. Issue strings come from `docker ps`, /proc,
+    # and curl rc codes — no HTML metacharacters in practice — and the
+    # container-name issue deliberately includes literal `<b>...</b>` tags
+    # for emphasis. We therefore concatenate as-is rather than passing each
+    # issue through telegram_html_escape (which would double-escape the
+    # tags). If a future check ingests untrusted text, escape it at the
+    # source before pushing into ${issues[@]}.
     body=""
     for issue in "${issues[@]}"; do
-        body="${body}\n\\- ${issue}"
+        body="${body}
+- ${issue}"
     done
 
-    # Tag all team members
-    tags="@nickxdeca @lavishdeca @samxdeca"
+    # Tag team members (literal text, no Markdown link)
+    tags="@sentientcogs"
 
-    message="*\U0001F6A8 Server Health Alert*${body}\n\n${tags}"
+    # U+1F6A8 ROTATING LIGHT — written as ANSI-C $'...' so the bytes are
+    # explicit and don't depend on bash's printf-format \xNN handling.
+    siren=$'\xF0\x9F\x9A\xA8'
+    message="<b>${siren} Server Health Alert</b>${body}
 
-    curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-        -d chat_id="$TELEGRAM_CHAT_ID" \
-        -d message_thread_id="$TELEGRAM_THREAD_ID" \
-        -d parse_mode="MarkdownV2" \
-        --data-urlencode "text=$(echo -e "$message")" \
-        > /dev/null
+${tags}"
+
+    send_telegram_alert "$message"
 
     echo "$(date '+%Y-%m-%d %H:%M:%S') Alert sent: ${#issues[@]} issue(s)"
 else
