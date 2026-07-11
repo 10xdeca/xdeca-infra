@@ -222,7 +222,7 @@ Access at http://localhost:3002. First signup becomes admin.
 
 # kanbn
 
-Self-hosted kanban boards (Trello alternative). Using 10xdeca/kan fork.
+Self-hosted kanban boards (Trello alternative). Deploys upstream `ghcr.io/kanbn/kan` images (see `kanbn/docker-compose.yml`).
 
 **URL**: https://tasks.xdeca.com
 
