@@ -88,6 +88,37 @@ backup_outline() {
   log "Outline backup complete: outline-$DATE.sql.gz"
 }
 
+# Back up the MinIO object store (Outline + Kan.bn ATTACHMENTS live here, NOT in
+# Postgres). Without this, a Postgres-only restore silently orphans every
+# attachment: the doc/card text survives but the files behind it 404. We tar the
+# raw `outline_minio_data` volume (the same volume both Outline and Kan.bn use)
+# rather than `mc mirror`, because MinIO encrypts objects at rest
+# (MINIO_KMS_SECRET_KEY_FILE) — the encrypted backend + .minio.sys must be
+# captured as-is, and restored alongside the unchanged KMS key from the deploy
+# secrets. Mirrors the volume-tar approach used by backup_radicale.
+backup_outline_minio() {
+  log "Backing up Outline/Kan.bn MinIO object store..."
+
+  local backup_file="$BACKUP_DIR/outline_minio-$DATE.tar.gz"
+  local volume="outline_minio_data"
+
+  if ! docker volume inspect "$volume" > /dev/null 2>&1; then
+    error "MinIO volume '$volume' not found — is the Outline stack up?"
+    return 1
+  fi
+
+  # Read-only tar of the whole volume via a throwaway alpine container.
+  docker run --rm -v "${volume}:/data:ro" alpine \
+    tar czf - -C / data > "$backup_file"
+
+  if [ ! -s "$backup_file" ]; then
+    error "MinIO backup file is empty"
+    return 1
+  fi
+
+  log "MinIO backup complete: outline_minio-$DATE.tar.gz"
+}
+
 backup_radicale() {
   log "Backing up Radicale..."
 
@@ -205,7 +236,7 @@ case $SERVICE in
     SUCCEEDED=()
     # gremlin omitted: hibernating since 2026-04-27 (no container to back up).
     # Re-add when waking gremlin per gremlin/CLAUDE.md wake-up runbook.
-    for svc in kanbn outline radicale; do
+    for svc in kanbn outline outline_minio radicale; do
       if "backup_${svc}"; then
         SUCCEEDED+=("$svc")
       else
@@ -224,6 +255,9 @@ case $SERVICE in
   outline)
     backup_outline && backup_to_github outline || FAILED_SERVICES+=(outline)
     ;;
+  outline_minio)
+    backup_outline_minio && backup_to_github outline_minio || FAILED_SERVICES+=(outline_minio)
+    ;;
   radicale)
     backup_radicale && backup_to_github radicale || FAILED_SERVICES+=(radicale)
     ;;
@@ -234,7 +268,7 @@ case $SERVICE in
     cleanup_old_backups
     ;;
   *)
-    echo "Usage: $0 [all|kanbn|outline|radicale|gremlin|cleanup]"
+    echo "Usage: $0 [all|kanbn|outline|outline_minio|radicale|gremlin|cleanup]"
     exit 1
     ;;
 esac
